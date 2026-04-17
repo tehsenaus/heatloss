@@ -4373,9 +4373,10 @@ function _Browser_load(url)
 var $author$project$Main$FromN50 = {$: 'FromN50'};
 var $author$project$Main$SAP2012 = {$: 'SAP2012'};
 var $author$project$Main$Slight = {$: 'Slight'};
+var $author$project$Main$South = {$: 'South'};
 var $author$project$Main$Tile = {$: 'Tile'};
 var $author$project$Main$VaultedRoof = {$: 'VaultedRoof'};
-var $author$project$Main$init = {ach: '0.5', emitterDeltaT: '5', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, tempIn: '21', tempOut: '-3', totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
+var $author$project$Main$init = {ach: '0.5', emitterDeltaT: '5', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, tempIn: '21', tempOut: '-3', totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
 var $elm$core$Basics$EQ = {$: 'EQ'};
 var $elm$core$Basics$GT = {$: 'GT'};
 var $elm$core$Basics$LT = {$: 'LT'};
@@ -5299,11 +5300,26 @@ var $author$project$Main$update = F2(
 				return _Utils_update(
 					model,
 					{emitterDeltaT: v});
-			default:
+			case 'SetHDD':
 				var v = msg.a;
 				return _Utils_update(
 					model,
 					{hdd: v});
+			case 'SetPvKwp':
+				var v = msg.a;
+				return _Utils_update(
+					model,
+					{pvKwp: v});
+			case 'SetPvIrradiation':
+				var v = msg.a;
+				return _Utils_update(
+					model,
+					{pvIrradiation: v});
+			default:
+				var o = msg.a;
+				return _Utils_update(
+					model,
+					{pvOrientation: o});
 		}
 	});
 var $elm$core$Maybe$andThen = F2(
@@ -5684,14 +5700,30 @@ var $author$project$Main$inputSection = F2(
 					A2($elm$html$Html$div, _List_Nil, rows)
 				]));
 	});
-var $author$project$Main$FlatRoof = {$: 'FlatRoof'};
-var $author$project$Main$SetPitchAngle = function (a) {
-	return {$: 'SetPitchAngle', a: a};
+var $author$project$Main$EastWest = {$: 'EastWest'};
+var $author$project$Main$North = {$: 'North'};
+var $author$project$Main$SetPvIrradiation = function (a) {
+	return {$: 'SetPvIrradiation', a: a};
 };
-var $author$project$Main$SetRoofType = function (a) {
-	return {$: 'SetRoofType', a: a};
+var $author$project$Main$SetPvKwp = function (a) {
+	return {$: 'SetPvKwp', a: a};
 };
-var $elm$html$Html$button = _VirtualDom_node('button');
+var $author$project$Main$SetPvOrientation = function (a) {
+	return {$: 'SetPvOrientation', a: a};
+};
+var $author$project$Main$SouthEastWest = {$: 'SouthEastWest'};
+var $author$project$Main$orientationLabel = function (o) {
+	switch (o.$) {
+		case 'South':
+			return 'South';
+		case 'SouthEastWest':
+			return 'SE / SW';
+		case 'EastWest':
+			return 'E / W';
+		default:
+			return 'North';
+	}
+};
 var $elm$virtual_dom$VirtualDom$Normal = function (a) {
 	return {$: 'Normal', a: a};
 };
@@ -5708,6 +5740,124 @@ var $elm$html$Html$Events$onClick = function (msg) {
 		'click',
 		$elm$json$Json$Decode$succeed(msg));
 };
+var $author$project$Main$radioRow = F3(
+	function (label, selected, msg) {
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					$elm$html$Html$Events$onClick(msg),
+					A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+					A2($elm$html$Html$Attributes$style, 'align-items', 'center'),
+					A2($elm$html$Html$Attributes$style, 'gap', '0.4rem'),
+					A2($elm$html$Html$Attributes$style, 'cursor', 'pointer'),
+					A2($elm$html$Html$Attributes$style, 'font-size', '0.83rem'),
+					A2(
+					$elm$html$Html$Attributes$style,
+					'color',
+					selected ? '#1a1a2e' : '#666'),
+					A2(
+					$elm$html$Html$Attributes$style,
+					'font-weight',
+					selected ? '600' : '400')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'width', '13px'),
+							A2($elm$html$Html$Attributes$style, 'height', '13px'),
+							A2($elm$html$Html$Attributes$style, 'border-radius', '50%'),
+							A2(
+							$elm$html$Html$Attributes$style,
+							'border',
+							'2px solid ' + (selected ? '#1a1a2e' : '#ccc')),
+							A2(
+							$elm$html$Html$Attributes$style,
+							'background',
+							selected ? '#1a1a2e' : 'transparent'),
+							A2($elm$html$Html$Attributes$style, 'flex-shrink', '0')
+						]),
+					_List_Nil),
+					$elm$html$Html$text(label)
+				]));
+	});
+var $author$project$Main$pvSection = function (m) {
+	return A2(
+		$elm$html$Html$div,
+		_List_fromArray(
+			[
+				A2($elm$html$Html$Attributes$style, 'margin-bottom', '1.5rem')
+			]),
+		_List_fromArray(
+			[
+				$author$project$Main$sectionLabel('Solar PV'),
+				A6($author$project$Main$inputRow, 'Array size', 'kWp', m.pvKwp, $author$project$Main$SetPvKwp, '0', '0.5'),
+				A6($author$project$Main$inputRow, 'Horizontal irradiation', 'kWh/m²/yr', m.pvIrradiation, $author$project$Main$SetPvIrradiation, '0', '10'),
+				A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'margin-top', '0.4rem')
+					]),
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$p,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'font-size', '0.75rem'),
+								A2($elm$html$Html$Attributes$style, 'color', '#888'),
+								A2($elm$html$Html$Attributes$style, 'margin-bottom', '0.3rem')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text('Orientation')
+							])),
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+								A2($elm$html$Html$Attributes$style, 'flex-direction', 'column'),
+								A2($elm$html$Html$Attributes$style, 'gap', '0.2rem')
+							]),
+						_List_fromArray(
+							[
+								A3(
+								$author$project$Main$radioRow,
+								$author$project$Main$orientationLabel($author$project$Main$South),
+								_Utils_eq(m.pvOrientation, $author$project$Main$South),
+								$author$project$Main$SetPvOrientation($author$project$Main$South)),
+								A3(
+								$author$project$Main$radioRow,
+								$author$project$Main$orientationLabel($author$project$Main$SouthEastWest),
+								_Utils_eq(m.pvOrientation, $author$project$Main$SouthEastWest),
+								$author$project$Main$SetPvOrientation($author$project$Main$SouthEastWest)),
+								A3(
+								$author$project$Main$radioRow,
+								$author$project$Main$orientationLabel($author$project$Main$EastWest),
+								_Utils_eq(m.pvOrientation, $author$project$Main$EastWest),
+								$author$project$Main$SetPvOrientation($author$project$Main$EastWest)),
+								A3(
+								$author$project$Main$radioRow,
+								$author$project$Main$orientationLabel($author$project$Main$North),
+								_Utils_eq(m.pvOrientation, $author$project$Main$North),
+								$author$project$Main$SetPvOrientation($author$project$Main$North))
+							]))
+					]))
+			]));
+};
+var $author$project$Main$FlatRoof = {$: 'FlatRoof'};
+var $author$project$Main$SetPitchAngle = function (a) {
+	return {$: 'SetPitchAngle', a: a};
+};
+var $author$project$Main$SetRoofType = function (a) {
+	return {$: 'SetRoofType', a: a};
+};
+var $elm$html$Html$button = _VirtualDom_node('button');
 var $author$project$Main$toggleBtn = F3(
 	function (label, active, msg) {
 		return A2(
@@ -5817,50 +5967,6 @@ var $author$project$Main$floorLabel = function (c) {
 			return 'Carpet';
 	}
 };
-var $author$project$Main$radioRow = F3(
-	function (label, selected, msg) {
-		return A2(
-			$elm$html$Html$div,
-			_List_fromArray(
-				[
-					$elm$html$Html$Events$onClick(msg),
-					A2($elm$html$Html$Attributes$style, 'display', 'flex'),
-					A2($elm$html$Html$Attributes$style, 'align-items', 'center'),
-					A2($elm$html$Html$Attributes$style, 'gap', '0.4rem'),
-					A2($elm$html$Html$Attributes$style, 'cursor', 'pointer'),
-					A2($elm$html$Html$Attributes$style, 'font-size', '0.83rem'),
-					A2(
-					$elm$html$Html$Attributes$style,
-					'color',
-					selected ? '#1a1a2e' : '#666'),
-					A2(
-					$elm$html$Html$Attributes$style,
-					'font-weight',
-					selected ? '600' : '400')
-				]),
-			_List_fromArray(
-				[
-					A2(
-					$elm$html$Html$div,
-					_List_fromArray(
-						[
-							A2($elm$html$Html$Attributes$style, 'width', '13px'),
-							A2($elm$html$Html$Attributes$style, 'height', '13px'),
-							A2($elm$html$Html$Attributes$style, 'border-radius', '50%'),
-							A2(
-							$elm$html$Html$Attributes$style,
-							'border',
-							'2px solid ' + (selected ? '#1a1a2e' : '#ccc')),
-							A2(
-							$elm$html$Html$Attributes$style,
-							'background',
-							selected ? '#1a1a2e' : 'transparent'),
-							A2($elm$html$Html$Attributes$style, 'flex-shrink', '0')
-						]),
-					_List_Nil),
-					$elm$html$Html$text(label)
-				]));
-	});
 var $author$project$Main$ufhSection = function (m) {
 	return A2(
 		$elm$html$Html$div,
@@ -6207,9 +6313,124 @@ var $author$project$Main$inputsPanel = function (m) {
 				_List_fromArray(
 					[
 						A6($author$project$Main$inputRow, 'Heating degree days', '°C·d', m.hdd, $author$project$Main$SetHDD, '0', '50')
-					]))
+					])),
+				$author$project$Main$pvSection(m)
 			]));
 };
+var $author$project$Main$performanceRatio = 0.80;
+var $author$project$Main$pvPitch = function (m) {
+	var _v0 = m.roofType;
+	if (_v0.$ === 'FlatRoof') {
+		return 0;
+	} else {
+		return A2(
+			$elm$core$Maybe$withDefault,
+			35,
+			$elm$core$String$toFloat(m.pitchAngle));
+	}
+};
+var $author$project$Main$interpolate = F2(
+	function (pts, x) {
+		interpolate:
+		while (true) {
+			if (!pts.b) {
+				return 0;
+			} else {
+				if (!pts.b.b) {
+					var _v1 = pts.a;
+					var y = _v1.b;
+					return y;
+				} else {
+					var _v2 = pts.a;
+					var x1 = _v2.a;
+					var y1 = _v2.b;
+					var rest = pts.b;
+					var _v3 = rest.a;
+					var x2 = _v3.a;
+					var y2 = _v3.b;
+					if (_Utils_cmp(x, x2) < 1) {
+						return y1 + (((y2 - y1) * (x - x1)) / (x2 - x1));
+					} else {
+						var $temp$pts = rest,
+							$temp$x = x;
+						pts = $temp$pts;
+						x = $temp$x;
+						continue interpolate;
+					}
+				}
+			}
+		}
+	});
+var $author$project$Main$tiltOrientFactor = F2(
+	function (orient, pitch) {
+		var points = function () {
+			switch (orient.$) {
+				case 'South':
+					return _List_fromArray(
+						[
+							_Utils_Tuple2(0, 1.00),
+							_Utils_Tuple2(20, 1.12),
+							_Utils_Tuple2(35, 1.16),
+							_Utils_Tuple2(50, 1.13),
+							_Utils_Tuple2(70, 1.05),
+							_Utils_Tuple2(90, 0.85)
+						]);
+				case 'SouthEastWest':
+					return _List_fromArray(
+						[
+							_Utils_Tuple2(0, 1.00),
+							_Utils_Tuple2(20, 1.05),
+							_Utils_Tuple2(35, 1.07),
+							_Utils_Tuple2(50, 1.02),
+							_Utils_Tuple2(70, 0.92),
+							_Utils_Tuple2(90, 0.73)
+						]);
+				case 'EastWest':
+					return _List_fromArray(
+						[
+							_Utils_Tuple2(0, 1.00),
+							_Utils_Tuple2(20, 0.96),
+							_Utils_Tuple2(35, 0.90),
+							_Utils_Tuple2(50, 0.82),
+							_Utils_Tuple2(70, 0.72),
+							_Utils_Tuple2(90, 0.58)
+						]);
+				default:
+					return _List_fromArray(
+						[
+							_Utils_Tuple2(0, 1.00),
+							_Utils_Tuple2(20, 0.82),
+							_Utils_Tuple2(35, 0.68),
+							_Utils_Tuple2(50, 0.58),
+							_Utils_Tuple2(70, 0.48),
+							_Utils_Tuple2(90, 0.40)
+						]);
+			}
+		}();
+		return A2(
+			$author$project$Main$interpolate,
+			points,
+			A3($elm$core$Basics$clamp, 0, 90, pitch));
+	});
+var $author$project$Main$calculatePv = F2(
+	function (m, u) {
+		return A2(
+			$elm$core$Maybe$andThen,
+			function (kwp) {
+				return A2(
+					$elm$core$Maybe$map,
+					function (h) {
+						var pitch = $author$project$Main$pvPitch(m);
+						var factor = A2($author$project$Main$tiltOrientFactor, m.pvOrientation, pitch);
+						var specificYield = (h * factor) * $author$project$Main$performanceRatio;
+						var annualKwh = kwp * specificYield;
+						var pctOfHp = (u.annualElecKwh > 0) ? ((annualKwh / u.annualElecKwh) * 100) : 0;
+						return {annualKwh: annualKwh, factor: factor, pctOfHpElec: pctOfHp, pitch: pitch, specificYield: specificYield};
+					},
+					$elm$core$String$toFloat(m.pvIrradiation));
+			},
+			$elm$core$String$toFloat(m.pvKwp));
+	});
 var $author$project$Main$estimateCop = F2(
 	function (flowC, sourceC) {
 		var lift = A2($elm$core$Basics$max, 1, flowC - sourceC);
@@ -6621,6 +6842,64 @@ var $author$project$Main$heatLossCard = function (r) {
 					]))
 			]));
 };
+var $author$project$Main$pvCard = F2(
+	function (_v0, pv) {
+		return A3(
+			$author$project$Main$card,
+			'#f5f7ff',
+			'Solar PV',
+			_List_fromArray(
+				[
+					A3(
+					$author$project$Main$detailRow,
+					'Tilt',
+					$author$project$Main$fmt1(pv.pitch),
+					'°'),
+					A3(
+					$author$project$Main$detailRow,
+					'Tilt/orient factor',
+					$author$project$Main$fmt2(pv.factor),
+					''),
+					A3(
+					$author$project$Main$detailRow,
+					'Specific yield',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(pv.specificYield)),
+					'kWh/kWp/yr'),
+					A3(
+					$author$project$Main$detailRow,
+					'Annual generation',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(pv.annualKwh)),
+					'kWh/yr'),
+					A2(
+					$elm$html$Html$hr,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'border', 'none'),
+							A2($elm$html$Html$Attributes$style, 'border-top', '1px solid #dde3f0'),
+							A2($elm$html$Html$Attributes$style, 'margin', '0.6rem 0')
+						]),
+					_List_Nil),
+					A3(
+					$author$project$Main$detailRow,
+					'vs heat pump electricity',
+					$author$project$Main$fmt1(pv.pctOfHpElec),
+					'%'),
+					A2(
+					$elm$html$Html$p,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'font-size', '0.75rem'),
+							A2($elm$html$Html$Attributes$style, 'color', '#888'),
+							A2($elm$html$Html$Attributes$style, 'margin-top', '0.4rem')
+						]),
+					_List_fromArray(
+						[
+							$elm$html$Html$text('Note: PV generates mostly Apr–Sep, when the heat pump barely runs. Direct winter offset is much smaller than the annual %.')
+						]))
+				]));
+	});
 var $author$project$Main$runningCard = function (u) {
 	return A3(
 		$author$project$Main$card,
@@ -6779,6 +7058,18 @@ var $author$project$Main$resultsPanel = F2(
 						if (_v2.$ === 'Just') {
 							var u = _v2.a;
 							return $author$project$Main$runningCard(u);
+						} else {
+							return $elm$html$Html$text('');
+						}
+					}(),
+						function () {
+						var _v3 = A2(
+							$elm$core$Maybe$andThen,
+							$author$project$Main$calculatePv(model),
+							A2($author$project$Main$calculateUFH, model, r));
+						if (_v3.$ === 'Just') {
+							var p = _v3.a;
+							return A2($author$project$Main$pvCard, model, p);
 						} else {
 							return $elm$html$Html$text('');
 						}

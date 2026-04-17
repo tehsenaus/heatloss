@@ -60,6 +60,53 @@ floorLabel c =
         Carpet -> "Carpet"
 
 
+type Orientation
+    = South
+    | SouthEastWest
+    | EastWest
+    | North
+
+
+orientationLabel : Orientation -> String
+orientationLabel o =
+    case o of
+        South         -> "South"
+        SouthEastWest -> "SE / SW"
+        EastWest      -> "E / W"
+        North         -> "North"
+
+
+-- Tilt/orientation factor relative to horizontal. Linear interp on pitch.
+tiltOrientFactor : Orientation -> Float -> Float
+tiltOrientFactor orient pitch =
+    let
+        points =
+            case orient of
+                South         -> [ (0, 1.00), (20, 1.12), (35, 1.16), (50, 1.13), (70, 1.05), (90, 0.85) ]
+                SouthEastWest -> [ (0, 1.00), (20, 1.05), (35, 1.07), (50, 1.02), (70, 0.92), (90, 0.73) ]
+                EastWest      -> [ (0, 1.00), (20, 0.96), (35, 0.90), (50, 0.82), (70, 0.72), (90, 0.58) ]
+                North         -> [ (0, 1.00), (20, 0.82), (35, 0.68), (50, 0.58), (70, 0.48), (90, 0.40) ]
+    in
+    interpolate points (clamp 0 90 pitch)
+
+
+interpolate : List ( Float, Float ) -> Float -> Float
+interpolate pts x =
+    case pts of
+        [] -> 0
+        [ ( _, y ) ] -> y
+        ( x1, y1 ) :: (( x2, y2 ) :: _ as rest) ->
+            if x <= x2 then
+                y1 + (y2 - y1) * (x - x1) / (x2 - x1)
+            else
+                interpolate rest x
+
+
+performanceRatio : Float
+performanceRatio =
+    0.80
+
+
 shelterMultiplier : ShelterFactor -> Float
 shelterMultiplier s =
     case s of
@@ -114,6 +161,9 @@ type alias Model =
     , flowTemp : String
     , emitterDeltaT : String
     , hdd : String
+    , pvKwp : String
+    , pvIrradiation : String
+    , pvOrientation : Orientation
     }
 
 
@@ -142,6 +192,9 @@ init =
     , flowTemp = "35"
     , emitterDeltaT = "5"
     , hdd = "2200"
+    , pvKwp = "4"
+    , pvIrradiation = "990"
+    , pvOrientation = South
     }
 
 
@@ -173,6 +226,9 @@ type Msg
     | SetFlowTemp String
     | SetEmitterDeltaT String
     | SetHDD String
+    | SetPvKwp String
+    | SetPvIrradiation String
+    | SetPvOrientation Orientation
 
 
 update : Msg -> Model -> Model
@@ -201,6 +257,9 @@ update msg model =
         SetFlowTemp v       -> { model | flowTemp = v }
         SetEmitterDeltaT v  -> { model | emitterDeltaT = v }
         SetHDD v            -> { model | hdd = v }
+        SetPvKwp v          -> { model | pvKwp = v }
+        SetPvIrradiation v  -> { model | pvIrradiation = v }
+        SetPvOrientation o  -> { model | pvOrientation = o }
 
 
 
@@ -423,6 +482,46 @@ calculateUFH m r =
 
 
 
+-- SOLAR PV
+
+
+type alias PvResults =
+    { pitch          : Float
+    , factor         : Float
+    , specificYield  : Float
+    , annualKwh      : Float
+    , pctOfHpElec    : Float
+    }
+
+
+pvPitch : Model -> Float
+pvPitch m =
+    case m.roofType of
+        FlatRoof    -> 0
+        VaultedRoof -> Maybe.withDefault 35 (String.toFloat m.pitchAngle)
+
+
+calculatePv : Model -> UFHResults -> Maybe PvResults
+calculatePv m u =
+    String.toFloat m.pvKwp         |> Maybe.andThen (\kwp ->
+    String.toFloat m.pvIrradiation |> Maybe.map     (\h ->
+        let
+            pitch         = pvPitch m
+            factor        = tiltOrientFactor m.pvOrientation pitch
+            specificYield = h * factor * performanceRatio
+            annualKwh     = kwp * specificYield
+            pctOfHp       = if u.annualElecKwh > 0 then annualKwh / u.annualElecKwh * 100 else 0
+        in
+        { pitch         = pitch
+        , factor        = factor
+        , specificYield = specificYield
+        , annualKwh     = annualKwh
+        , pctOfHpElec   = pctOfHp
+        }
+    ))
+
+
+
 -- VIEW
 
 
@@ -486,6 +585,26 @@ inputsPanel m =
         , ufhSection m
         , inputSection "Annual Energy"
             [ inputRow "Heating degree days" "°C·d" m.hdd SetHDD "0" "50"
+            ]
+        , pvSection m
+        ]
+
+
+pvSection : Model -> Html Msg
+pvSection m =
+    div [ style "margin-bottom" "1.5rem" ]
+        [ sectionLabel "Solar PV"
+        , inputRow "Array size" "kWp" m.pvKwp SetPvKwp "0" "0.5"
+        , inputRow "Horizontal irradiation" "kWh/m²/yr" m.pvIrradiation SetPvIrradiation "0" "10"
+        , div [ style "margin-top" "0.4rem" ]
+            [ p [ style "font-size" "0.75rem", style "color" "#888", style "margin-bottom" "0.3rem" ]
+                [ text "Orientation" ]
+            , div [ style "display" "flex", style "flex-direction" "column", style "gap" "0.2rem" ]
+                [ radioRow (orientationLabel South)         (m.pvOrientation == South)         (SetPvOrientation South)
+                , radioRow (orientationLabel SouthEastWest) (m.pvOrientation == SouthEastWest) (SetPvOrientation SouthEastWest)
+                , radioRow (orientationLabel EastWest)      (m.pvOrientation == EastWest)      (SetPvOrientation EastWest)
+                , radioRow (orientationLabel North)         (m.pvOrientation == North)         (SetPvOrientation North)
+                ]
             ]
         ]
 
@@ -741,7 +860,27 @@ resultsPanel model maybeR =
                 , case calculateUFH model r of
                     Just u  -> runningCard u
                     Nothing -> text ""
+                , case calculateUFH model r |> Maybe.andThen (calculatePv model) of
+                    Just p  -> pvCard model p
+                    Nothing -> text ""
                 ]
+
+
+pvCard : Model -> PvResults -> Html Msg
+pvCard _ pv =
+    card "#f5f7ff" "Solar PV"
+        [ detailRow "Tilt"                (fmt1 pv.pitch)                            "°"
+        , detailRow "Tilt/orient factor"  (fmt2 pv.factor)                           ""
+        , detailRow "Specific yield"      (String.fromInt (round pv.specificYield))  "kWh/kWp/yr"
+        , detailRow "Annual generation"   (String.fromInt (round pv.annualKwh))      "kWh/yr"
+        , hr [ style "border" "none", style "border-top" "1px solid #dde3f0", style "margin" "0.6rem 0" ] []
+        , detailRow "vs heat pump electricity" (fmt1 pv.pctOfHpElec) "%"
+        , p [ style "font-size" "0.75rem"
+            , style "color" "#888"
+            , style "margin-top" "0.4rem"
+            ]
+          [ text "Note: PV generates mostly Apr–Sep, when the heat pump barely runs. Direct winter offset is much smaller than the annual %." ]
+        ]
 
 
 ufhCard : Model -> UFHResults -> Html Msg
