@@ -522,6 +522,63 @@ calculatePv m u =
 
 
 
+-- MONTHLY BREAKDOWN
+
+
+type alias MonthlyRow =
+    { month         : String
+    , pvKwh         : Float
+    , demandDayKwh  : Float
+    , demandNightKwh : Float
+    }
+
+
+monthNames : List String
+monthNames =
+    [ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" ]
+
+
+-- HDD fractions by month (UK typical, sums to 1.00)
+hddFractions : List Float
+hddFractions =
+    [ 0.16, 0.14, 0.12, 0.08, 0.05, 0.02, 0.01, 0.01, 0.04, 0.09, 0.12, 0.16 ]
+
+
+-- PV generation fractions by month (UK south-facing, sums to 1.00)
+pvFractions : List Float
+pvFractions =
+    [ 0.03, 0.05, 0.08, 0.12, 0.13, 0.14, 0.14, 0.12, 0.09, 0.06, 0.03, 0.01 ]
+
+
+-- Average daylight hours by month (UK ~52°N)
+daylightHours : List Float
+daylightHours =
+    [ 8.0, 10.0, 12.0, 14.0, 15.5, 16.5, 16.0, 14.5, 12.5, 11.0, 9.0, 7.5 ]
+
+
+monthlyBreakdown : UFHResults -> PvResults -> List MonthlyRow
+monthlyBreakdown u pv =
+    List.map4
+        (\name hddF pvF dl ->
+            let
+                demand     = u.annualElecKwh * hddF
+                dayFrac    = dl / 24
+                demandDay  = demand * dayFrac
+                demandNite = demand * (1 - dayFrac)
+            in
+            { month          = name
+            , pvKwh          = pv.annualKwh * pvF
+            , demandDayKwh   = demandDay
+            , demandNightKwh = demandNite
+            }
+        )
+        monthNames
+        hddFractions
+        pvFractions
+        daylightHours
+
+
+
 -- VIEW
 
 
@@ -555,6 +612,144 @@ view model =
             [ inputsPanel model
             , resultsPanel model (calculate model)
             ]
+        , monthlyChartSection model (calculate model)
+        ]
+
+
+monthlyChartSection : Model -> Maybe Results -> Html Msg
+monthlyChartSection model maybeR =
+    case maybeR |> Maybe.andThen (\r -> calculateUFH model r |> Maybe.andThen (\u -> calculatePv model u |> Maybe.map (\pv -> ( u, pv )))) of
+        Nothing ->
+            text ""
+
+        Just ( u, pv ) ->
+            let
+                rows = monthlyBreakdown u pv
+                maxVal =
+                    rows
+                        |> List.map (\m -> Basics.max m.pvKwh (m.demandDayKwh + m.demandNightKwh))
+                        |> List.maximum
+                        |> Maybe.withDefault 1
+            in
+            div
+                [ style "margin-top" "2rem"
+                , style "background" "#f5f7ff"
+                , style "border-radius" "10px"
+                , style "padding" "1.25rem"
+                ]
+                [ p
+                    [ style "font-size" "0.72rem"
+                    , style "font-weight" "600"
+                    , style "text-transform" "uppercase"
+                    , style "letter-spacing" "0.08em"
+                    , style "color" "#888"
+                    , style "margin-bottom" "0.5rem"
+                    ]
+                    [ text "Monthly — Heat Pump Electricity vs Solar PV" ]
+                , chartLegend
+                , monthlyChart rows maxVal
+                ]
+
+
+chartLegend : Html Msg
+chartLegend =
+    div
+        [ style "display" "flex"
+        , style "gap" "1rem"
+        , style "flex-wrap" "wrap"
+        , style "font-size" "0.78rem"
+        , style "color" "#555"
+        , style "margin-bottom" "0.75rem"
+        ]
+        [ legendSwatch "#2e7d32" "PV generation (day)"
+        , legendSwatch "#c77700" "HP demand — day"
+        , legendSwatch "#6a4b8a" "HP demand — night"
+        ]
+
+
+legendSwatch : String -> String -> Html Msg
+legendSwatch colour label =
+    div [ style "display" "flex", style "align-items" "center", style "gap" "0.35rem" ]
+        [ div
+            [ style "width" "12px"
+            , style "height" "12px"
+            , style "background" colour
+            , style "border-radius" "2px"
+            ]
+            []
+        , text label
+        ]
+
+
+monthlyChart : List MonthlyRow -> Float -> Html Msg
+monthlyChart rows maxVal =
+    let
+        chartH = 180.0
+
+        bar colour h =
+            div
+                [ style "width" "14px"
+                , style "height" (String.fromFloat h ++ "px")
+                , style "background" colour
+                ]
+                []
+
+        column row =
+            let
+                pvH      = row.pvKwh * chartH / maxVal
+                dayH     = row.demandDayKwh * chartH / maxVal
+                nightH   = row.demandNightKwh * chartH / maxVal
+                demandH  = dayH + nightH
+            in
+            div [ style "display" "flex", style "flex-direction" "column", style "align-items" "center", style "gap" "0.4rem", style "flex" "1" ]
+                [ div
+                    [ style "display" "flex"
+                    , style "align-items" "flex-end"
+                    , style "gap" "3px"
+                    , style "height" (String.fromFloat chartH ++ "px")
+                    ]
+                    [ bar "#2e7d32" pvH
+                    , div
+                        [ style "display" "flex"
+                        , style "flex-direction" "column-reverse"
+                        , style "height" (String.fromFloat demandH ++ "px")
+                        , style "width" "14px"
+                        ]
+                        [ bar "#c77700" dayH
+                        , bar "#6a4b8a" nightH
+                        ]
+                    ]
+                , div [ style "font-size" "0.72rem", style "color" "#666" ] [ text row.month ]
+                ]
+
+        yLabel : Float -> Html Msg
+        yLabel v =
+            div
+                [ style "position" "absolute"
+                , style "right" "0.5rem"
+                , style "top" (String.fromFloat (chartH * (1 - v / maxVal)) ++ "px")
+                , style "font-size" "0.7rem"
+                , style "color" "#888"
+                , style "transform" "translateY(-50%)"
+                , style "white-space" "nowrap"
+                , style "text-align" "right"
+                ]
+                [ text (String.fromInt (round v) ++ " kWh") ]
+    in
+    div [ style "display" "flex", style "gap" "0.25rem", style "padding-left" "3.5rem", style "position" "relative" ]
+        [ div
+            [ style "position" "absolute"
+            , style "left" "0"
+            , style "top" "0"
+            , style "width" "3.5rem"
+            , style "height" (String.fromFloat chartH ++ "px")
+            ]
+            [ yLabel maxVal
+            , yLabel (maxVal / 2)
+            , yLabel 0
+            ]
+        , div [ style "display" "flex", style "flex" "1", style "gap" "0.25rem" ]
+            (List.map column rows)
         ]
 
 

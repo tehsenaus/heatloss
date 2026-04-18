@@ -6497,6 +6497,298 @@ var $author$project$Main$calculateUFH = F2(
 			},
 			$elm$core$String$toFloat(m.heatedFloorArea));
 	});
+var $author$project$Main$legendSwatch = F2(
+	function (colour, label) {
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+					A2($elm$html$Html$Attributes$style, 'align-items', 'center'),
+					A2($elm$html$Html$Attributes$style, 'gap', '0.35rem')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'width', '12px'),
+							A2($elm$html$Html$Attributes$style, 'height', '12px'),
+							A2($elm$html$Html$Attributes$style, 'background', colour),
+							A2($elm$html$Html$Attributes$style, 'border-radius', '2px')
+						]),
+					_List_Nil),
+					$elm$html$Html$text(label)
+				]));
+	});
+var $author$project$Main$chartLegend = A2(
+	$elm$html$Html$div,
+	_List_fromArray(
+		[
+			A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+			A2($elm$html$Html$Attributes$style, 'gap', '1rem'),
+			A2($elm$html$Html$Attributes$style, 'flex-wrap', 'wrap'),
+			A2($elm$html$Html$Attributes$style, 'font-size', '0.78rem'),
+			A2($elm$html$Html$Attributes$style, 'color', '#555'),
+			A2($elm$html$Html$Attributes$style, 'margin-bottom', '0.75rem')
+		]),
+	_List_fromArray(
+		[
+			A2($author$project$Main$legendSwatch, '#2e7d32', 'PV generation (day)'),
+			A2($author$project$Main$legendSwatch, '#c77700', 'HP demand — day'),
+			A2($author$project$Main$legendSwatch, '#6a4b8a', 'HP demand — night')
+		]));
+var $elm$core$List$maximum = function (list) {
+	if (list.b) {
+		var x = list.a;
+		var xs = list.b;
+		return $elm$core$Maybe$Just(
+			A3($elm$core$List$foldl, $elm$core$Basics$max, x, xs));
+	} else {
+		return $elm$core$Maybe$Nothing;
+	}
+};
+var $author$project$Main$daylightHours = _List_fromArray(
+	[8.0, 10.0, 12.0, 14.0, 15.5, 16.5, 16.0, 14.5, 12.5, 11.0, 9.0, 7.5]);
+var $author$project$Main$hddFractions = _List_fromArray(
+	[0.16, 0.14, 0.12, 0.08, 0.05, 0.02, 0.01, 0.01, 0.04, 0.09, 0.12, 0.16]);
+var $elm$core$List$map4 = _List_map4;
+var $author$project$Main$monthNames = _List_fromArray(
+	['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']);
+var $author$project$Main$pvFractions = _List_fromArray(
+	[0.03, 0.05, 0.08, 0.12, 0.13, 0.14, 0.14, 0.12, 0.09, 0.06, 0.03, 0.01]);
+var $author$project$Main$monthlyBreakdown = F2(
+	function (u, pv) {
+		return A5(
+			$elm$core$List$map4,
+			F4(
+				function (name, hddF, pvF, dl) {
+					var demand = u.annualElecKwh * hddF;
+					var dayFrac = dl / 24;
+					var demandDay = demand * dayFrac;
+					var demandNite = demand * (1 - dayFrac);
+					return {demandDayKwh: demandDay, demandNightKwh: demandNite, month: name, pvKwh: pv.annualKwh * pvF};
+				}),
+			$author$project$Main$monthNames,
+			$author$project$Main$hddFractions,
+			$author$project$Main$pvFractions,
+			$author$project$Main$daylightHours);
+	});
+var $elm$core$String$fromFloat = _String_fromNumber;
+var $elm$core$Basics$round = _Basics_round;
+var $author$project$Main$monthlyChart = F2(
+	function (rows, maxVal) {
+		var chartH = 180.0;
+		var yLabel = function (v) {
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+						A2($elm$html$Html$Attributes$style, 'right', '0.5rem'),
+						A2(
+						$elm$html$Html$Attributes$style,
+						'top',
+						$elm$core$String$fromFloat(chartH * (1 - (v / maxVal))) + 'px'),
+						A2($elm$html$Html$Attributes$style, 'font-size', '0.7rem'),
+						A2($elm$html$Html$Attributes$style, 'color', '#888'),
+						A2($elm$html$Html$Attributes$style, 'transform', 'translateY(-50%)'),
+						A2($elm$html$Html$Attributes$style, 'white-space', 'nowrap'),
+						A2($elm$html$Html$Attributes$style, 'text-align', 'right')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text(
+						$elm$core$String$fromInt(
+							$elm$core$Basics$round(v)) + ' kWh')
+					]));
+		};
+		var bar = F2(
+			function (colour, h) {
+				return A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'width', '14px'),
+							A2(
+							$elm$html$Html$Attributes$style,
+							'height',
+							$elm$core$String$fromFloat(h) + 'px'),
+							A2($elm$html$Html$Attributes$style, 'background', colour)
+						]),
+					_List_Nil);
+			});
+		var column = function (row) {
+			var pvH = (row.pvKwh * chartH) / maxVal;
+			var nightH = (row.demandNightKwh * chartH) / maxVal;
+			var dayH = (row.demandDayKwh * chartH) / maxVal;
+			var demandH = dayH + nightH;
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+						A2($elm$html$Html$Attributes$style, 'flex-direction', 'column'),
+						A2($elm$html$Html$Attributes$style, 'align-items', 'center'),
+						A2($elm$html$Html$Attributes$style, 'gap', '0.4rem'),
+						A2($elm$html$Html$Attributes$style, 'flex', '1')
+					]),
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+								A2($elm$html$Html$Attributes$style, 'align-items', 'flex-end'),
+								A2($elm$html$Html$Attributes$style, 'gap', '3px'),
+								A2(
+								$elm$html$Html$Attributes$style,
+								'height',
+								$elm$core$String$fromFloat(chartH) + 'px')
+							]),
+						_List_fromArray(
+							[
+								A2(bar, '#2e7d32', pvH),
+								A2(
+								$elm$html$Html$div,
+								_List_fromArray(
+									[
+										A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+										A2($elm$html$Html$Attributes$style, 'flex-direction', 'column-reverse'),
+										A2(
+										$elm$html$Html$Attributes$style,
+										'height',
+										$elm$core$String$fromFloat(demandH) + 'px'),
+										A2($elm$html$Html$Attributes$style, 'width', '14px')
+									]),
+								_List_fromArray(
+									[
+										A2(bar, '#c77700', dayH),
+										A2(bar, '#6a4b8a', nightH)
+									]))
+							])),
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'font-size', '0.72rem'),
+								A2($elm$html$Html$Attributes$style, 'color', '#666')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text(row.month)
+							]))
+					]));
+		};
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+					A2($elm$html$Html$Attributes$style, 'gap', '0.25rem'),
+					A2($elm$html$Html$Attributes$style, 'padding-left', '3.5rem'),
+					A2($elm$html$Html$Attributes$style, 'position', 'relative')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+							A2($elm$html$Html$Attributes$style, 'left', '0'),
+							A2($elm$html$Html$Attributes$style, 'top', '0'),
+							A2($elm$html$Html$Attributes$style, 'width', '3.5rem'),
+							A2(
+							$elm$html$Html$Attributes$style,
+							'height',
+							$elm$core$String$fromFloat(chartH) + 'px')
+						]),
+					_List_fromArray(
+						[
+							yLabel(maxVal),
+							yLabel(maxVal / 2),
+							yLabel(0)
+						])),
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+							A2($elm$html$Html$Attributes$style, 'flex', '1'),
+							A2($elm$html$Html$Attributes$style, 'gap', '0.25rem')
+						]),
+					A2($elm$core$List$map, column, rows))
+				]));
+	});
+var $author$project$Main$monthlyChartSection = F2(
+	function (model, maybeR) {
+		var _v0 = A2(
+			$elm$core$Maybe$andThen,
+			function (r) {
+				return A2(
+					$elm$core$Maybe$andThen,
+					function (u) {
+						return A2(
+							$elm$core$Maybe$map,
+							function (pv) {
+								return _Utils_Tuple2(u, pv);
+							},
+							A2($author$project$Main$calculatePv, model, u));
+					},
+					A2($author$project$Main$calculateUFH, model, r));
+			},
+			maybeR);
+		if (_v0.$ === 'Nothing') {
+			return $elm$html$Html$text('');
+		} else {
+			var _v1 = _v0.a;
+			var u = _v1.a;
+			var pv = _v1.b;
+			var rows = A2($author$project$Main$monthlyBreakdown, u, pv);
+			var maxVal = A2(
+				$elm$core$Maybe$withDefault,
+				1,
+				$elm$core$List$maximum(
+					A2(
+						$elm$core$List$map,
+						function (m) {
+							return A2($elm$core$Basics$max, m.pvKwh, m.demandDayKwh + m.demandNightKwh);
+						},
+						rows)));
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'margin-top', '2rem'),
+						A2($elm$html$Html$Attributes$style, 'background', '#f5f7ff'),
+						A2($elm$html$Html$Attributes$style, 'border-radius', '10px'),
+						A2($elm$html$Html$Attributes$style, 'padding', '1.25rem')
+					]),
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$p,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'font-size', '0.72rem'),
+								A2($elm$html$Html$Attributes$style, 'font-weight', '600'),
+								A2($elm$html$Html$Attributes$style, 'text-transform', 'uppercase'),
+								A2($elm$html$Html$Attributes$style, 'letter-spacing', '0.08em'),
+								A2($elm$html$Html$Attributes$style, 'color', '#888'),
+								A2($elm$html$Html$Attributes$style, 'margin-bottom', '0.5rem')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text('Monthly — Heat Pump Electricity vs Solar PV')
+							])),
+						$author$project$Main$chartLegend,
+						A2($author$project$Main$monthlyChart, rows, maxVal)
+					]));
+		}
+	});
 var $author$project$Main$card = F3(
 	function (bg, title, children) {
 		return A2(
@@ -6555,8 +6847,6 @@ var $author$project$Main$detailRow = F3(
 						]))
 				]));
 	});
-var $elm$core$String$fromFloat = _String_fromNumber;
-var $elm$core$Basics$round = _Basics_round;
 var $author$project$Main$fmt1 = function (f) {
 	return $elm$core$String$fromFloat(
 		$elm$core$Basics$round(f * 10) / 10);
@@ -7130,7 +7420,11 @@ var $author$project$Main$view = function (model) {
 						$author$project$Main$resultsPanel,
 						model,
 						$author$project$Main$calculate(model))
-					]))
+					])),
+				A2(
+				$author$project$Main$monthlyChartSection,
+				model,
+				$author$project$Main$calculate(model))
 			]));
 };
 var $author$project$Main$main = $elm$browser$Browser$sandbox(
