@@ -231,6 +231,7 @@ type alias Model =
     , pvOrientation : Orientation
     , gValue : String
     , thermalMass : ThermalMass
+    , summerTempOut : String
     }
 
 
@@ -287,6 +288,7 @@ defaultModel =
     , pvOrientation = South
     , gValue = "0.6"
     , thermalMass = MediumMass
+    , summerTempOut = "28"
     }
 
 
@@ -442,6 +444,7 @@ encodeParams m =
     , orientationToF m.pvOrientation
     , toF m.gValue
     , thermalMassToF m.thermalMass
+    , toF m.summerTempOut
     ]
 
 
@@ -488,6 +491,7 @@ decodeParams floats =
     , pvOrientation   = orientationFromF (getF 25 (orientationToF d.pvOrientation))
     , gValue          = getS 26 d.gValue
     , thermalMass     = thermalMassFromF (getF 27 (thermalMassToF d.thermalMass))
+    , summerTempOut   = getS 28 d.summerTempOut
     }
 
 
@@ -524,6 +528,7 @@ type Msg
     | SetPvOrientation Orientation
     | SetGValue String
     | SetThermalMass ThermalMass
+    | SetSummerTempOut String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -566,6 +571,7 @@ updateField msg model =
         SetPvOrientation o  -> { model | pvOrientation = o }
         SetGValue v         -> { model | gValue = v }
         SetThermalMass t    -> { model | thermalMass = t }
+        SetSummerTempOut v  -> { model | summerTempOut = v }
 
 
 
@@ -587,6 +593,84 @@ effectiveACH m =
                             SAP2012     -> n50 * windFactor SAP2012 * shelterMultiplier m.shelterFactor
                             HEM         -> n50 * windFactor HEM     * shelterMultiplier m.shelterFactor
                     )
+
+
+
+-- COOLING CONSTANTS
+--
+-- Internal heat gains: occupants + lighting + appliances. EN ISO 13790
+-- default for residential is ~3-5 W/m². We use 4 W/m² as a continuous
+-- average — a simplification (real loads are spiky) but adequate for
+-- monthly/design sizing.
+internalGainsWperM2 : Float
+internalGainsWperM2 =
+    4
+
+
+-- Indoor cooling setpoint (constant). Typical residential summer comfort
+-- target. Kept separate from heating tempIn since they're conceptually
+-- different (heating to 21°C, cooling above 25°C — a 4°C dead band).
+coolingSetpoint : Float
+coolingSetpoint =
+    25
+
+
+-- UK monthly average outdoor air temperature (°C). Used to estimate
+-- "free cooling" capacity through the fabric in the monthly breakdown:
+-- when avg Tout < 25°C the building can shed solar/internal gains
+-- passively. Source: typical UK Met Office climate normals.
+monthlyAvgTempC : List Float
+monthlyAvgTempC =
+    [ 4.5, 4.5, 6.5, 8.5, 11.5, 14.5, 16.5, 16.5, 14.0, 10.5, 6.5, 4.5 ]
+
+
+-- Diurnal temperature swing (°C) — daytime is roughly this much above the
+-- 24h average and nighttime this much below. UK summer typical ~3°C; we
+-- use it year-round as a rough constant. Used so we don't credit
+-- night-time fabric losses against daytime cooling demand (comfort needs
+-- to be maintained through the day).
+diurnalSwing : Float
+diurnalSwing =
+    3
+
+
+-- Seasonal cooling COP (SEER-equivalent) for an ASHP run in reverse.
+-- UK summer conditions: chilled flow ~16°C, outdoor ~20°C avg → Carnot
+-- ~70, real-world field SEER for residential ASHPs sits ~3–4. We use 3.5
+-- as a representative figure. Lower than heating SCOP would suggest from
+-- Carnot alone because of part-load cycling and dehumidification overhead.
+-- (Note: UFH-as-cooling has condensation/dewpoint constraints that may
+-- limit usable flow temps; not modelled here.)
+coolingScop : Float
+coolingScop =
+    3.5
+
+
+-- Internal gain split day/night. Occupants/cooking/lighting peak during
+-- waking hours; some baseload (fridge, standby) overnight. Rough 60/40.
+internalGainDayFrac : Float
+internalGainDayFrac =
+    0.6
+
+
+-- Estimate peak instantaneous horizontal irradiance (W/m²) from annual
+-- horizontal irradiation (kWh/m²/yr). Peak is bounded by clear-sky
+-- atmospheric maximum (~950 W/m² at UK latitudes); annual is mostly
+-- cloud-driven. In UK range (800–1100 kWh/yr) the linear scaling holds;
+-- sunnier climates saturate. The 0.85 coefficient was chosen so the UK
+-- default (990 kWh/yr) yields ~840 W/m².
+peakHorizFromAnnual : Float -> Float
+peakHorizFromAnnual annual =
+    Basics.min 950 (0.85 * annual)
+
+
+-- Internal blinds: typical residential occupants close blinds when sun
+-- is direct, transmitting ~60% of incident solar. Applied to peak (design)
+-- cooling only — the annual/monthly utilisation calc keeps full incident
+-- since blinds aren't used continuously through the year.
+blindsFactor : Float
+blindsFactor =
+    0.6
 
 
 
@@ -880,6 +964,67 @@ calculatePv m u =
 
 
 
+-- COOLING (DESIGN DAY)
+
+
+type alias CoolingResults =
+    { deltaT        : Float
+    , peakHoriz     : Float
+    , qFabric       : Float   -- W, gain when Tout > Tin
+    , qVent         : Float
+    , qInternal     : Float
+    , qSolar        : Float
+    , qTotal        : Float
+    }
+
+
+calculateCooling : Model -> Results -> Maybe CoolingResults
+calculateCooling m r =
+    String.toFloat m.summerTempOut |> Maybe.andThen (\toS ->
+    String.toFloat m.gValue        |> Maybe.andThen (\gVal ->
+    String.toFloat m.totalFloorArea |> Maybe.andThen (\tfa ->
+    String.toFloat m.pvIrradiation |> Maybe.map     (\horizIrr ->
+        let
+            tIn  = coolingSetpoint
+            dT   = toS - tIn
+
+            -- Reuse fabric/vent UA from the heating calc. Same physics
+            -- — heat flows down a temperature gradient — sign just flips.
+            -- Splitting fabric vs vent here for breakdown clarity.
+            fabricW = r.qWalls + r.qGlazing + r.qRoof + r.qFloor + r.qBridges
+            uaFabric = if r.deltaT > 0 then fabricW / r.deltaT else 0
+            uaVent   = if r.deltaT > 0 then r.qVent / r.deltaT else 0
+
+            qFabric   = uaFabric * dT
+            qVent     = uaVent * dT
+            qInternal = internalGainsWperM2 * tfa
+
+            -- Peak solar through glazing. Reuses glazingVertFactor (annual
+            -- ratio) as an approximation for peak — acceptable for sizing.
+            -- South wall is slightly overstated since summer noon sun is
+            -- high; east/west marginally understated. Net error is small
+            -- given the 35/35/15/15 fixed split already averages directions.
+            -- Internal blinds factor (0.6): typical mid-colour internal
+            -- venetian/roller blinds transmit ~50-70% of incident solar;
+            -- 0.6 is a reasonable mid-point. External shading would be
+            -- ~0.2-0.3 but we assume internal only as the realistic default.
+            peakHoriz = peakHorizFromAnnual horizIrr
+            qSolar    = peakHoriz * r.glazingArea * gVal * glazingVertFactor * blindsFactor
+
+            qTotal = Basics.max 0 (qFabric + qVent + qInternal + qSolar)
+        in
+        { deltaT    = dT
+        , peakHoriz = peakHoriz
+        , qFabric   = qFabric
+        , qVent     = qVent
+        , qInternal = qInternal
+        , qSolar    = qSolar
+        , qTotal    = qTotal
+        }
+    ))))
+
+
+
 -- MONTHLY BREAKDOWN
 
 
@@ -891,6 +1036,9 @@ type alias MonthlyRow =
     , grossHeatKwh   : Float
     , solarGainKwh   : Float
     , usefulGainKwh  : Float
+    , coolingKwh     : Float
+    , coolingElecKwh : Float
+    , daysInMonth    : Float
     }
 
 
@@ -922,13 +1070,28 @@ daysInMonth =
     [ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 ]
 
 
-monthlyBreakdown : Model -> UFHResults -> PvResults -> List MonthlyRow
-monthlyBreakdown m u pv =
+monthlyBreakdown : Model -> Results -> UFHResults -> PvResults -> List MonthlyRow
+monthlyBreakdown m r u pv =
     let
         tau = thermalMassTau m.thermalMass
+        tfa = String.toFloat m.totalFloorArea |> Maybe.withDefault 0
+
+        -- Total UA (fabric + vent + bridges) for free-cooling estimate.
+        ua = if r.deltaT > 0 then r.qTotal / r.deltaT else 0
+
+        -- Daily internal gains (kWh/day), constant year-round.
+        internalDaily = internalGainsWperM2 * tfa * 24 / 1000
+
+        -- Monthly cooling target: use the user's heating internal design
+        -- temp (e.g. 21°C) rather than the fixed 25°C cooling setpoint.
+        -- The design cooling load card still uses 25°C (a more lenient
+        -- comfort threshold typical for sizing); the monthly demand uses
+        -- the tighter target to reflect occupants wanting consistent
+        -- year-round indoor temperature.
+        coolTarget = String.toFloat m.tempIn |> Maybe.withDefault coolingSetpoint
     in
     List.map5
-        (\name hddF pvF dl days ->
+        (\name ( hddF, pvF ) dl days avgT ->
             let
                 grossHeat = u.annualHeatKwh * hddF
                 gain      = u.annualSolarGain * pvF
@@ -942,6 +1105,35 @@ monthlyBreakdown m u pv =
                 netHeat = Basics.max 0 (grossHeat - useful)
                 netElec = if u.scop > 0 then netHeat / u.scop else 0
                 dayFrac = dl / 24
+
+                -- Monthly cooling, split day/night so that daytime fabric
+                -- losses must absorb daytime gains — comfort must be
+                -- maintained *during the day*, so night-time loss
+                -- capacity doesn't subsidise day cooling. (Thermal mass
+                -- shifting is ignored here; would partially close the gap
+                -- for heavy buildings.)
+                dayHours   = dl
+                nightHours = 24 - dl
+
+                dayT   = avgT + diurnalSwing
+                nightT = avgT - diurnalSwing
+
+                -- All solar excess hits during daylight.
+                excessSolarDay = (gain - useful) / days
+                internalDay    = internalDaily * internalGainDayFrac
+                internalNight  = internalDaily * (1 - internalGainDayFrac)
+
+                freeCoolDay =
+                    ua * Basics.max 0 (coolTarget - dayT) * dayHours / 1000
+
+                freeCoolNight =
+                    ua * Basics.max 0 (coolTarget - nightT) * nightHours / 1000
+
+                coolingDayDemand   = Basics.max 0 (excessSolarDay + internalDay - freeCoolDay)
+                coolingNightDemand = Basics.max 0 (internalNight - freeCoolNight)
+
+                coolingDaily = coolingDayDemand + coolingNightDemand
+                coolingElec  = coolingDaily / coolingScop
             in
             { month          = name
             , pvKwh          = pv.annualKwh * pvF / days
@@ -950,13 +1142,16 @@ monthlyBreakdown m u pv =
             , grossHeatKwh   = grossHeat / days
             , solarGainKwh   = gain / days
             , usefulGainKwh  = useful / days
+            , coolingKwh     = coolingDaily
+            , coolingElecKwh = coolingElec
+            , daysInMonth    = days
             }
         )
         monthNames
-        hddFractions
-        pvFractions
+        (List.map2 Tuple.pair hddFractions pvFractions)
         daylightHours
         daysInMonth
+        monthlyAvgTempC
 
 
 
@@ -999,16 +1194,16 @@ view model =
 
 monthlyChartSection : Model -> Maybe Results -> Html Msg
 monthlyChartSection model maybeR =
-    case maybeR |> Maybe.andThen (\r -> calculateUFH model r |> Maybe.andThen (\u -> calculatePv model u |> Maybe.map (\pv -> ( u, pv )))) of
+    case maybeR |> Maybe.andThen (\r -> calculateUFH model r |> Maybe.andThen (\u -> calculatePv model u |> Maybe.map (\pv -> ( r, u, pv )))) of
         Nothing ->
             text ""
 
-        Just ( u, pv ) ->
+        Just ( r, u, pv ) ->
             let
-                rows = monthlyBreakdown model u pv
+                rows = monthlyBreakdown model r u pv
                 maxVal =
                     rows
-                        |> List.map (\m -> Basics.max m.pvKwh (m.demandDayKwh + m.demandNightKwh))
+                        |> List.map (\m -> Basics.max m.pvKwh (m.demandDayKwh + m.demandNightKwh + m.coolingElecKwh))
                         |> List.maximum
                         |> Maybe.withDefault 1
             in
@@ -1030,6 +1225,7 @@ monthlyChartSection model maybeR =
                 , chartLegend
                 , monthlyChart rows maxVal
                 , heatChartSection rows
+                , coolingChartSection rows
                 ]
 
 
@@ -1138,6 +1334,100 @@ heatChart rows maxVal =
         ]
 
 
+coolingChartSection : List MonthlyRow -> Html Msg
+coolingChartSection rows =
+    let
+        maxC =
+            rows
+                |> List.map .coolingKwh
+                |> List.maximum
+                |> Maybe.withDefault 0
+    in
+    if maxC < 0.01 then
+        div [ style "margin-top" "1.5rem"
+            , style "font-size" "0.8rem"
+            , style "color" "#666"
+            ]
+            [ text "Cooling demand: ~0 across all months (gains absorbed by fabric)." ]
+
+    else
+        div [ style "margin-top" "1.5rem" ]
+            [ p
+                [ style "font-size" "0.72rem"
+                , style "font-weight" "600"
+                , style "text-transform" "uppercase"
+                , style "letter-spacing" "0.08em"
+                , style "color" "#888"
+                , style "margin-bottom" "0.5rem"
+                ]
+                [ text "Monthly — Cooling Demand (excess gain after free cooling)" ]
+            , div
+                [ style "display" "flex"
+                , style "gap" "1rem"
+                , style "font-size" "0.78rem"
+                , style "color" "#555"
+                , style "margin-bottom" "0.75rem"
+                ]
+                [ legendSwatch "#3b82c4" "Cooling demand"
+                ]
+            , singleBarChart rows .coolingKwh "#3b82c4" maxC
+            ]
+
+
+singleBarChart : List MonthlyRow -> (MonthlyRow -> Float) -> String -> Float -> Html Msg
+singleBarChart rows getter colour maxVal =
+    let
+        chartH = 140.0
+
+        column row =
+            let
+                h = getter row * chartH / Basics.max maxVal 0.001
+            in
+            div [ style "display" "flex", style "flex-direction" "column", style "align-items" "center", style "gap" "0.4rem", style "flex" "1" ]
+                [ div
+                    [ style "display" "flex"
+                    , style "align-items" "flex-end"
+                    , style "height" (String.fromFloat chartH ++ "px")
+                    ]
+                    [ div
+                        [ style "width" "20px"
+                        , style "height" (String.fromFloat h ++ "px")
+                        , style "background" colour
+                        ]
+                        []
+                    ]
+                , div [ style "font-size" "0.72rem", style "color" "#666" ] [ text row.month ]
+                ]
+
+        yLabel v =
+            div
+                [ style "position" "absolute"
+                , style "right" "0.5rem"
+                , style "top" (String.fromFloat (chartH * (1 - v / Basics.max maxVal 0.001)) ++ "px")
+                , style "font-size" "0.7rem"
+                , style "color" "#888"
+                , style "transform" "translateY(-50%)"
+                , style "white-space" "nowrap"
+                ]
+                [ text (String.fromInt (round v) ++ " kWh/day") ]
+    in
+    div [ style "display" "flex", style "gap" "0.25rem", style "padding-left" "3.5rem", style "position" "relative" ]
+        [ div
+            [ style "position" "absolute"
+            , style "left" "0"
+            , style "top" "0"
+            , style "width" "3.5rem"
+            , style "height" (String.fromFloat chartH ++ "px")
+            ]
+            [ yLabel maxVal
+            , yLabel (maxVal / 2)
+            , yLabel 0
+            ]
+        , div [ style "display" "flex", style "flex" "1", style "gap" "0.25rem" ]
+            (List.map column rows)
+        ]
+
+
 chartLegend : Html Msg
 chartLegend =
     div
@@ -1151,6 +1441,7 @@ chartLegend =
         [ legendSwatch "#2e7d32" "PV generation (day)"
         , legendSwatch "#c77700" "HP demand — day"
         , legendSwatch "#6a4b8a" "HP demand — night"
+        , legendSwatch "#3b82c4" "HP demand — cooling"
         ]
 
 
@@ -1186,7 +1477,8 @@ monthlyChart rows maxVal =
                 pvH      = row.pvKwh * chartH / maxVal
                 dayH     = row.demandDayKwh * chartH / maxVal
                 nightH   = row.demandNightKwh * chartH / maxVal
-                demandH  = dayH + nightH
+                coolH    = row.coolingElecKwh * chartH / maxVal
+                demandH  = dayH + nightH + coolH
             in
             div [ style "display" "flex", style "flex-direction" "column", style "align-items" "center", style "gap" "0.4rem", style "flex" "1" ]
                 [ div
@@ -1204,6 +1496,7 @@ monthlyChart rows maxVal =
                         ]
                         [ bar "#c77700" dayH
                         , bar "#6a4b8a" nightH
+                        , bar "#3b82c4" coolH
                         ]
                     ]
                 , div [ style "font-size" "0.72rem", style "color" "#666" ] [ text row.month ]
@@ -1263,8 +1556,9 @@ inputsPanel m =
         , yFactorSection m
         , ventilationSection m
         , inputSection "Design Temperatures"
-            [ inputRow "Internal" "°C" m.tempIn SetTempIn "" "1"
-            , inputRow "External" "°C" m.tempOut SetTempOut "" "1"
+            [ inputRow "Internal (heating)" "°C" m.tempIn SetTempIn "" "1"
+            , inputRow "External (winter)"  "°C" m.tempOut SetTempOut "" "1"
+            , inputRow "External (summer)"  "°C" m.summerTempOut SetSummerTempOut "" "1"
             ]
         , ufhSection m
         , inputSection "Annual Energy"
@@ -1550,16 +1844,66 @@ resultsPanel model maybeR =
             div []
                 [ geometryCard model r
                 , heatLossCard r
+                , case calculateCooling model r of
+                    Just c  -> coolingCard c
+                    Nothing -> text ""
                 , case calculateUFH model r of
                     Just u  -> ufhCard model u
                     Nothing -> text ""
-                , case calculateUFH model r of
-                    Just u  -> runningCard u
-                    Nothing -> text ""
+                , case calculateUFH model r |> Maybe.andThen (\u -> calculatePv model u |> Maybe.map (\pv -> ( u, pv ))) of
+                    Just ( u, pv ) ->
+                        let
+                            rows = monthlyBreakdown model r u pv
+                            annualCoolKwh =
+                                rows |> List.map (\row -> row.coolingKwh * row.daysInMonth) |> List.sum
+                            annualCoolElec =
+                                rows |> List.map (\row -> row.coolingElecKwh * row.daysInMonth) |> List.sum
+                        in
+                        runningCard u annualCoolKwh annualCoolElec
+
+                    Nothing ->
+                        text ""
                 , case calculateUFH model r |> Maybe.andThen (calculatePv model) of
                     Just p  -> pvCard model p
                     Nothing -> text ""
                 ]
+
+
+coolingCard : CoolingResults -> Html Msg
+coolingCard c =
+    card "#f5f7ff" "Design Cooling Load"
+        [ detailRow "ΔT (out − in)"        (fmt1 c.deltaT)              "K"
+        , detailRow "Peak horiz. irrad."   (String.fromInt (round c.peakHoriz)) "W/m²"
+        , hr [ style "border" "none", style "border-top" "1px solid #dde3f0", style "margin" "0.4rem 0" ] []
+        , detailRow "Fabric gain"          (String.fromInt (round c.qFabric))   "W"
+        , detailRow "Ventilation gain"     (String.fromInt (round c.qVent))     "W"
+        , detailRow "Internal gains"       (String.fromInt (round c.qInternal)) "W"
+        , detailRow "Solar (peak through glazing)" (String.fromInt (round c.qSolar)) "W"
+        , hr [ style "border" "none", style "border-top" "2px solid #1a1a2e", style "margin" "0.6rem 0" ] []
+        , div
+            [ style "display" "flex"
+            , style "justify-content" "space-between"
+            , style "align-items" "baseline"
+            ]
+            [ span [ style "font-weight" "700", style "font-size" "0.95rem" ] [ text "Total" ]
+            , div [ style "text-align" "right" ]
+                [ div
+                    [ style "font-size" "1.5rem"
+                    , style "font-weight" "700"
+                    , style "color" "#1a1a2e"
+                    , style "line-height" "1"
+                    ]
+                    [ text (fmt2 (c.qTotal / 1000) ++ " kW") ]
+                , div [ style "font-size" "0.78rem", style "color" "#888", style "margin-top" "0.2rem" ]
+                    [ text (String.fromInt (round c.qTotal) ++ " W") ]
+                ]
+            ]
+        , p [ style "font-size" "0.75rem"
+            , style "color" "#888"
+            , style "margin-top" "0.5rem"
+            ]
+            [ text "Setpoint 25 °C. Internal gains 4 W/m². Solar assumes internal blinds (×0.6)." ]
+        ]
 
 
 pvCard : Model -> PvResults -> Html Msg
@@ -1623,16 +1967,20 @@ ufhCard model u =
         ]
 
 
-runningCard : UFHResults -> Html Msg
-runningCard u =
+runningCard : UFHResults -> Float -> Float -> Html Msg
+runningCard u annualCoolKwh annualCoolElec =
     card "#f5f7ff" "Annual Energy"
         [ detailRow "Gross heat demand"   (String.fromInt (round u.annualHeatKwh))     "kWh/yr"
         , detailRow "Solar gain (incident)" (String.fromInt (round u.annualSolarGain)) "kWh/yr"
         , detailRow "  → useful (heating)" ("−" ++ String.fromInt (round u.annualUsefulGain)) "kWh/yr"
         , detailRow "  → excess (cooling load)" (String.fromInt (round u.annualExcessGain)) "kWh/yr"
         , detailRow "Net heat demand"     (String.fromInt (round u.annualNetHeatKwh))  "kWh/yr"
+        , detailRow "Cooling demand"      (String.fromInt (round annualCoolKwh))       "kWh/yr"
         , hr [ style "border" "none", style "border-top" "1px solid #dde3f0", style "margin" "0.4rem 0" ] []
-        , detailRow "Electricity (HP)"    (String.fromInt (round u.annualElecKwh))      "kWh/yr"
+        , detailRow "Electricity (heating)"  (String.fromInt (round u.annualElecKwh))   "kWh/yr"
+        , detailRow ("Electricity (cooling, SCOP " ++ fmt1 coolingScop ++ ")")
+                    (String.fromInt (round annualCoolElec)) "kWh/yr"
+        , detailRow "Electricity (total)" (String.fromInt (round (u.annualElecKwh + annualCoolElec))) "kWh/yr"
         ]
 
 

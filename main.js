@@ -5204,7 +5204,7 @@ var $author$project$Main$Slight = {$: 'Slight'};
 var $author$project$Main$South = {$: 'South'};
 var $author$project$Main$Tile = {$: 'Tile'};
 var $author$project$Main$VaultedRoof = {$: 'VaultedRoof'};
-var $author$project$Main$defaultModel = {ach: '0.5', emitterDeltaT: '5', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', gValue: '0.6', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, tempIn: '21', tempOut: '-3', thermalMass: $author$project$Main$MediumMass, totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
+var $author$project$Main$defaultModel = {ach: '0.5', emitterDeltaT: '5', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', gValue: '0.6', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, summerTempOut: '28', tempIn: '21', tempOut: '-3', thermalMass: $author$project$Main$MediumMass, totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
 var $author$project$Main$Carpet = {$: 'Carpet'};
 var $author$project$Main$Wood = {$: 'Wood'};
 var $elm$core$Basics$round = _Basics_round;
@@ -5516,6 +5516,7 @@ var $author$project$Main$decodeParams = function (floats) {
 				getF,
 				15,
 				$author$project$Main$shelterFactorToF(d.shelterFactor))),
+		summerTempOut: A2(getS, 28, d.summerTempOut),
 		tempIn: A2(getS, 16, d.tempIn),
 		tempOut: A2(getS, 17, d.tempOut),
 		thermalMass: $author$project$Main$thermalMassFromF(
@@ -5591,7 +5592,8 @@ var $author$project$Main$encodeParams = function (m) {
 			$author$project$Main$toF(m.pvIrradiation),
 			$author$project$Main$orientationToF(m.pvOrientation),
 			$author$project$Main$toF(m.gValue),
-			$author$project$Main$thermalMassToF(m.thermalMass)
+			$author$project$Main$thermalMassToF(m.thermalMass),
+			$author$project$Main$toF(m.summerTempOut)
 		]);
 };
 var $elm$json$Json$Encode$float = _Json_wrap;
@@ -5745,11 +5747,16 @@ var $author$project$Main$updateField = F2(
 				return _Utils_update(
 					model,
 					{gValue: v});
-			default:
+			case 'SetThermalMass':
 				var t = msg.a;
 				return _Utils_update(
 					model,
 					{thermalMass: t});
+			default:
+				var v = msg.a;
+				return _Utils_update(
+					model,
+					{summerTempOut: v});
 		}
 	});
 var $author$project$Main$update = F2(
@@ -5965,6 +5972,9 @@ var $author$project$Main$SetNumFloors = function (a) {
 };
 var $author$project$Main$SetRoofU = function (a) {
 	return {$: 'SetRoofU', a: a};
+};
+var $author$project$Main$SetSummerTempOut = function (a) {
+	return {$: 'SetSummerTempOut', a: a};
 };
 var $author$project$Main$SetTempIn = function (a) {
 	return {$: 'SetTempIn', a: a};
@@ -6767,8 +6777,9 @@ var $author$project$Main$inputsPanel = function (m) {
 				'Design Temperatures',
 				_List_fromArray(
 					[
-						A6($author$project$Main$inputRow, 'Internal', '°C', m.tempIn, $author$project$Main$SetTempIn, '', '1'),
-						A6($author$project$Main$inputRow, 'External', '°C', m.tempOut, $author$project$Main$SetTempOut, '', '1')
+						A6($author$project$Main$inputRow, 'Internal (heating)', '°C', m.tempIn, $author$project$Main$SetTempIn, '', '1'),
+						A6($author$project$Main$inputRow, 'External (winter)', '°C', m.tempOut, $author$project$Main$SetTempOut, '', '1'),
+						A6($author$project$Main$inputRow, 'External (summer)', '°C', m.summerTempOut, $author$project$Main$SetSummerTempOut, '', '1')
 					])),
 				$author$project$Main$ufhSection(m),
 				A2(
@@ -7056,8 +7067,209 @@ var $author$project$Main$chartLegend = A2(
 		[
 			A2($author$project$Main$legendSwatch, '#2e7d32', 'PV generation (day)'),
 			A2($author$project$Main$legendSwatch, '#c77700', 'HP demand — day'),
-			A2($author$project$Main$legendSwatch, '#6a4b8a', 'HP demand — night')
+			A2($author$project$Main$legendSwatch, '#6a4b8a', 'HP demand — night'),
+			A2($author$project$Main$legendSwatch, '#3b82c4', 'HP demand — cooling')
 		]));
+var $elm$core$List$maximum = function (list) {
+	if (list.b) {
+		var x = list.a;
+		var xs = list.b;
+		return $elm$core$Maybe$Just(
+			A3($elm$core$List$foldl, $elm$core$Basics$max, x, xs));
+	} else {
+		return $elm$core$Maybe$Nothing;
+	}
+};
+var $author$project$Main$singleBarChart = F4(
+	function (rows, getter, colour, maxVal) {
+		var chartH = 140.0;
+		var column = function (row) {
+			var h = (getter(row) * chartH) / A2($elm$core$Basics$max, maxVal, 0.001);
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+						A2($elm$html$Html$Attributes$style, 'flex-direction', 'column'),
+						A2($elm$html$Html$Attributes$style, 'align-items', 'center'),
+						A2($elm$html$Html$Attributes$style, 'gap', '0.4rem'),
+						A2($elm$html$Html$Attributes$style, 'flex', '1')
+					]),
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+								A2($elm$html$Html$Attributes$style, 'align-items', 'flex-end'),
+								A2(
+								$elm$html$Html$Attributes$style,
+								'height',
+								$elm$core$String$fromFloat(chartH) + 'px')
+							]),
+						_List_fromArray(
+							[
+								A2(
+								$elm$html$Html$div,
+								_List_fromArray(
+									[
+										A2($elm$html$Html$Attributes$style, 'width', '20px'),
+										A2(
+										$elm$html$Html$Attributes$style,
+										'height',
+										$elm$core$String$fromFloat(h) + 'px'),
+										A2($elm$html$Html$Attributes$style, 'background', colour)
+									]),
+								_List_Nil)
+							])),
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'font-size', '0.72rem'),
+								A2($elm$html$Html$Attributes$style, 'color', '#666')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text(row.month)
+							]))
+					]));
+		};
+		var yLabel = function (v) {
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+						A2($elm$html$Html$Attributes$style, 'right', '0.5rem'),
+						A2(
+						$elm$html$Html$Attributes$style,
+						'top',
+						$elm$core$String$fromFloat(
+							chartH * (1 - (v / A2($elm$core$Basics$max, maxVal, 0.001)))) + 'px'),
+						A2($elm$html$Html$Attributes$style, 'font-size', '0.7rem'),
+						A2($elm$html$Html$Attributes$style, 'color', '#888'),
+						A2($elm$html$Html$Attributes$style, 'transform', 'translateY(-50%)'),
+						A2($elm$html$Html$Attributes$style, 'white-space', 'nowrap')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text(
+						$elm$core$String$fromInt(
+							$elm$core$Basics$round(v)) + ' kWh/day')
+					]));
+		};
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+					A2($elm$html$Html$Attributes$style, 'gap', '0.25rem'),
+					A2($elm$html$Html$Attributes$style, 'padding-left', '3.5rem'),
+					A2($elm$html$Html$Attributes$style, 'position', 'relative')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+							A2($elm$html$Html$Attributes$style, 'left', '0'),
+							A2($elm$html$Html$Attributes$style, 'top', '0'),
+							A2($elm$html$Html$Attributes$style, 'width', '3.5rem'),
+							A2(
+							$elm$html$Html$Attributes$style,
+							'height',
+							$elm$core$String$fromFloat(chartH) + 'px')
+						]),
+					_List_fromArray(
+						[
+							yLabel(maxVal),
+							yLabel(maxVal / 2),
+							yLabel(0)
+						])),
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+							A2($elm$html$Html$Attributes$style, 'flex', '1'),
+							A2($elm$html$Html$Attributes$style, 'gap', '0.25rem')
+						]),
+					A2($elm$core$List$map, column, rows))
+				]));
+	});
+var $author$project$Main$coolingChartSection = function (rows) {
+	var maxC = A2(
+		$elm$core$Maybe$withDefault,
+		0,
+		$elm$core$List$maximum(
+			A2(
+				$elm$core$List$map,
+				function ($) {
+					return $.coolingKwh;
+				},
+				rows)));
+	return (maxC < 0.01) ? A2(
+		$elm$html$Html$div,
+		_List_fromArray(
+			[
+				A2($elm$html$Html$Attributes$style, 'margin-top', '1.5rem'),
+				A2($elm$html$Html$Attributes$style, 'font-size', '0.8rem'),
+				A2($elm$html$Html$Attributes$style, 'color', '#666')
+			]),
+		_List_fromArray(
+			[
+				$elm$html$Html$text('Cooling demand: ~0 across all months (gains absorbed by fabric).')
+			])) : A2(
+		$elm$html$Html$div,
+		_List_fromArray(
+			[
+				A2($elm$html$Html$Attributes$style, 'margin-top', '1.5rem')
+			]),
+		_List_fromArray(
+			[
+				A2(
+				$elm$html$Html$p,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'font-size', '0.72rem'),
+						A2($elm$html$Html$Attributes$style, 'font-weight', '600'),
+						A2($elm$html$Html$Attributes$style, 'text-transform', 'uppercase'),
+						A2($elm$html$Html$Attributes$style, 'letter-spacing', '0.08em'),
+						A2($elm$html$Html$Attributes$style, 'color', '#888'),
+						A2($elm$html$Html$Attributes$style, 'margin-bottom', '0.5rem')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Monthly — Cooling Demand (excess gain after free cooling)')
+					])),
+				A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+						A2($elm$html$Html$Attributes$style, 'gap', '1rem'),
+						A2($elm$html$Html$Attributes$style, 'font-size', '0.78rem'),
+						A2($elm$html$Html$Attributes$style, 'color', '#555'),
+						A2($elm$html$Html$Attributes$style, 'margin-bottom', '0.75rem')
+					]),
+				_List_fromArray(
+					[
+						A2($author$project$Main$legendSwatch, '#3b82c4', 'Cooling demand')
+					])),
+				A4(
+				$author$project$Main$singleBarChart,
+				rows,
+				function ($) {
+					return $.coolingKwh;
+				},
+				'#3b82c4',
+				maxC)
+			]));
+};
 var $author$project$Main$heatChart = F2(
 	function (rows, maxVal) {
 		var chartH = 160.0;
@@ -7204,16 +7416,6 @@ var $author$project$Main$heatChart = F2(
 					A2($elm$core$List$map, column, rows))
 				]));
 	});
-var $elm$core$List$maximum = function (list) {
-	if (list.b) {
-		var x = list.a;
-		var xs = list.b;
-		return $elm$core$Maybe$Just(
-			A3($elm$core$List$foldl, $elm$core$Basics$max, x, xs));
-	} else {
-		return $elm$core$Maybe$Nothing;
-	}
-};
 var $author$project$Main$heatChartSection = function (rows) {
 	var maxHeat = A2(
 		$elm$core$Maybe$withDefault,
@@ -7267,33 +7469,69 @@ var $author$project$Main$heatChartSection = function (rows) {
 				A2($author$project$Main$heatChart, rows, maxHeat)
 			]));
 };
+var $author$project$Main$coolingScop = 3.5;
+var $author$project$Main$coolingSetpoint = 25;
 var $author$project$Main$daylightHours = _List_fromArray(
 	[8.0, 10.0, 12.0, 14.0, 15.5, 16.5, 16.0, 14.5, 12.5, 11.0, 9.0, 7.5]);
 var $author$project$Main$daysInMonth = _List_fromArray(
 	[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]);
+var $author$project$Main$diurnalSwing = 3;
+var $author$project$Main$internalGainDayFrac = 0.6;
+var $author$project$Main$internalGainsWperM2 = 4;
 var $elm$core$List$map5 = _List_map5;
 var $author$project$Main$monthNames = _List_fromArray(
 	['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']);
-var $author$project$Main$monthlyBreakdown = F3(
-	function (m, u, pv) {
+var $author$project$Main$monthlyAvgTempC = _List_fromArray(
+	[4.5, 4.5, 6.5, 8.5, 11.5, 14.5, 16.5, 16.5, 14.0, 10.5, 6.5, 4.5]);
+var $elm$core$Tuple$pair = F2(
+	function (a, b) {
+		return _Utils_Tuple2(a, b);
+	});
+var $author$project$Main$monthlyBreakdown = F4(
+	function (m, r, u, pv) {
+		var ua = (r.deltaT > 0) ? (r.qTotal / r.deltaT) : 0;
+		var tfa = A2(
+			$elm$core$Maybe$withDefault,
+			0,
+			$elm$core$String$toFloat(m.totalFloorArea));
 		var tau = $author$project$Main$thermalMassTau(m.thermalMass);
+		var internalDaily = (($author$project$Main$internalGainsWperM2 * tfa) * 24) / 1000;
+		var coolTarget = A2(
+			$elm$core$Maybe$withDefault,
+			$author$project$Main$coolingSetpoint,
+			$elm$core$String$toFloat(m.tempIn));
 		return A6(
 			$elm$core$List$map5,
 			F5(
-				function (name, hddF, pvF, dl, days) {
+				function (name, _v0, dl, days, avgT) {
+					var hddF = _v0.a;
+					var pvF = _v0.b;
+					var nightT = avgT - $author$project$Main$diurnalSwing;
+					var nightHours = 24 - dl;
+					var internalNight = internalDaily * (1 - $author$project$Main$internalGainDayFrac);
+					var internalDay = internalDaily * $author$project$Main$internalGainDayFrac;
 					var grossHeat = u.annualHeatKwh * hddF;
 					var gain = u.annualSolarGain * pvF;
 					var useful = (grossHeat < 0.001) ? 0 : (A2($author$project$Main$utilisationFactor, gain / grossHeat, tau) * gain);
 					var netHeat = A2($elm$core$Basics$max, 0, grossHeat - useful);
 					var netElec = (u.scop > 0) ? (netHeat / u.scop) : 0;
+					var freeCoolNight = ((ua * A2($elm$core$Basics$max, 0, coolTarget - nightT)) * nightHours) / 1000;
+					var excessSolarDay = (gain - useful) / days;
+					var dayT = avgT + $author$project$Main$diurnalSwing;
+					var dayHours = dl;
+					var freeCoolDay = ((ua * A2($elm$core$Basics$max, 0, coolTarget - dayT)) * dayHours) / 1000;
 					var dayFrac = dl / 24;
-					return {demandDayKwh: (netElec * dayFrac) / days, demandNightKwh: (netElec * (1 - dayFrac)) / days, grossHeatKwh: grossHeat / days, month: name, pvKwh: (pv.annualKwh * pvF) / days, solarGainKwh: gain / days, usefulGainKwh: useful / days};
+					var coolingNightDemand = A2($elm$core$Basics$max, 0, internalNight - freeCoolNight);
+					var coolingDayDemand = A2($elm$core$Basics$max, 0, (excessSolarDay + internalDay) - freeCoolDay);
+					var coolingDaily = coolingDayDemand + coolingNightDemand;
+					var coolingElec = coolingDaily / $author$project$Main$coolingScop;
+					return {coolingElecKwh: coolingElec, coolingKwh: coolingDaily, daysInMonth: days, demandDayKwh: (netElec * dayFrac) / days, demandNightKwh: (netElec * (1 - dayFrac)) / days, grossHeatKwh: grossHeat / days, month: name, pvKwh: (pv.annualKwh * pvF) / days, solarGainKwh: gain / days, usefulGainKwh: useful / days};
 				}),
 			$author$project$Main$monthNames,
-			$author$project$Main$hddFractions,
-			$author$project$Main$pvFractions,
+			A3($elm$core$List$map2, $elm$core$Tuple$pair, $author$project$Main$hddFractions, $author$project$Main$pvFractions),
 			$author$project$Main$daylightHours,
-			$author$project$Main$daysInMonth);
+			$author$project$Main$daysInMonth,
+			$author$project$Main$monthlyAvgTempC);
 	});
 var $author$project$Main$monthlyChart = F2(
 	function (rows, maxVal) {
@@ -7341,7 +7579,8 @@ var $author$project$Main$monthlyChart = F2(
 			var pvH = (row.pvKwh * chartH) / maxVal;
 			var nightH = (row.demandNightKwh * chartH) / maxVal;
 			var dayH = (row.demandDayKwh * chartH) / maxVal;
-			var demandH = dayH + nightH;
+			var coolH = (row.coolingElecKwh * chartH) / maxVal;
+			var demandH = (dayH + nightH) + coolH;
 			return A2(
 				$elm$html$Html$div,
 				_List_fromArray(
@@ -7384,7 +7623,8 @@ var $author$project$Main$monthlyChart = F2(
 								_List_fromArray(
 									[
 										A2(bar, '#c77700', dayH),
-										A2(bar, '#6a4b8a', nightH)
+										A2(bar, '#6a4b8a', nightH),
+										A2(bar, '#3b82c4', coolH)
 									]))
 							])),
 						A2(
@@ -7452,7 +7692,7 @@ var $author$project$Main$monthlyChartSection = F2(
 						return A2(
 							$elm$core$Maybe$map,
 							function (pv) {
-								return _Utils_Tuple2(u, pv);
+								return _Utils_Tuple3(r, u, pv);
 							},
 							A2($author$project$Main$calculatePv, model, u));
 					},
@@ -7463,9 +7703,10 @@ var $author$project$Main$monthlyChartSection = F2(
 			return $elm$html$Html$text('');
 		} else {
 			var _v1 = _v0.a;
-			var u = _v1.a;
-			var pv = _v1.b;
-			var rows = A3($author$project$Main$monthlyBreakdown, model, u, pv);
+			var r = _v1.a;
+			var u = _v1.b;
+			var pv = _v1.c;
+			var rows = A4($author$project$Main$monthlyBreakdown, model, r, u, pv);
 			var maxVal = A2(
 				$elm$core$Maybe$withDefault,
 				1,
@@ -7473,7 +7714,7 @@ var $author$project$Main$monthlyChartSection = F2(
 					A2(
 						$elm$core$List$map,
 						function (m) {
-							return A2($elm$core$Basics$max, m.pvKwh, m.demandDayKwh + m.demandNightKwh);
+							return A2($elm$core$Basics$max, m.pvKwh, (m.demandDayKwh + m.demandNightKwh) + m.coolingElecKwh);
 						},
 						rows)));
 			return A2(
@@ -7504,9 +7745,53 @@ var $author$project$Main$monthlyChartSection = F2(
 							])),
 						$author$project$Main$chartLegend,
 						A2($author$project$Main$monthlyChart, rows, maxVal),
-						$author$project$Main$heatChartSection(rows)
+						$author$project$Main$heatChartSection(rows),
+						$author$project$Main$coolingChartSection(rows)
 					]));
 		}
+	});
+var $author$project$Main$blindsFactor = 0.6;
+var $elm$core$Basics$min = F2(
+	function (x, y) {
+		return (_Utils_cmp(x, y) < 0) ? x : y;
+	});
+var $author$project$Main$peakHorizFromAnnual = function (annual) {
+	return A2($elm$core$Basics$min, 950, 0.85 * annual);
+};
+var $author$project$Main$calculateCooling = F2(
+	function (m, r) {
+		return A2(
+			$elm$core$Maybe$andThen,
+			function (toS) {
+				return A2(
+					$elm$core$Maybe$andThen,
+					function (gVal) {
+						return A2(
+							$elm$core$Maybe$andThen,
+							function (tfa) {
+								return A2(
+									$elm$core$Maybe$map,
+									function (horizIrr) {
+										var uaVent = (r.deltaT > 0) ? (r.qVent / r.deltaT) : 0;
+										var tIn = $author$project$Main$coolingSetpoint;
+										var qInternal = $author$project$Main$internalGainsWperM2 * tfa;
+										var peakHoriz = $author$project$Main$peakHorizFromAnnual(horizIrr);
+										var qSolar = (((peakHoriz * r.glazingArea) * gVal) * $author$project$Main$glazingVertFactor) * $author$project$Main$blindsFactor;
+										var fabricW = (((r.qWalls + r.qGlazing) + r.qRoof) + r.qFloor) + r.qBridges;
+										var uaFabric = (r.deltaT > 0) ? (fabricW / r.deltaT) : 0;
+										var dT = toS - tIn;
+										var qFabric = uaFabric * dT;
+										var qVent = uaVent * dT;
+										var qTotal = A2($elm$core$Basics$max, 0, ((qFabric + qVent) + qInternal) + qSolar);
+										return {deltaT: dT, peakHoriz: peakHoriz, qFabric: qFabric, qInternal: qInternal, qSolar: qSolar, qTotal: qTotal, qVent: qVent};
+									},
+									$elm$core$String$toFloat(m.pvIrradiation));
+							},
+							$elm$core$String$toFloat(m.totalFloorArea));
+					},
+					$elm$core$String$toFloat(m.gValue));
+			},
+			$elm$core$String$toFloat(m.summerTempOut));
 	});
 var $author$project$Main$card = F3(
 	function (bg, title, children) {
@@ -7575,6 +7860,139 @@ var $author$project$Main$fmt2 = function (f) {
 		$elm$core$Basics$round(f * 100) / 100);
 };
 var $elm$html$Html$hr = _VirtualDom_node('hr');
+var $author$project$Main$coolingCard = function (c) {
+	return A3(
+		$author$project$Main$card,
+		'#f5f7ff',
+		'Design Cooling Load',
+		_List_fromArray(
+			[
+				A3(
+				$author$project$Main$detailRow,
+				'ΔT (out − in)',
+				$author$project$Main$fmt1(c.deltaT),
+				'K'),
+				A3(
+				$author$project$Main$detailRow,
+				'Peak horiz. irrad.',
+				$elm$core$String$fromInt(
+					$elm$core$Basics$round(c.peakHoriz)),
+				'W/m²'),
+				A2(
+				$elm$html$Html$hr,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'border', 'none'),
+						A2($elm$html$Html$Attributes$style, 'border-top', '1px solid #dde3f0'),
+						A2($elm$html$Html$Attributes$style, 'margin', '0.4rem 0')
+					]),
+				_List_Nil),
+				A3(
+				$author$project$Main$detailRow,
+				'Fabric gain',
+				$elm$core$String$fromInt(
+					$elm$core$Basics$round(c.qFabric)),
+				'W'),
+				A3(
+				$author$project$Main$detailRow,
+				'Ventilation gain',
+				$elm$core$String$fromInt(
+					$elm$core$Basics$round(c.qVent)),
+				'W'),
+				A3(
+				$author$project$Main$detailRow,
+				'Internal gains',
+				$elm$core$String$fromInt(
+					$elm$core$Basics$round(c.qInternal)),
+				'W'),
+				A3(
+				$author$project$Main$detailRow,
+				'Solar (peak through glazing)',
+				$elm$core$String$fromInt(
+					$elm$core$Basics$round(c.qSolar)),
+				'W'),
+				A2(
+				$elm$html$Html$hr,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'border', 'none'),
+						A2($elm$html$Html$Attributes$style, 'border-top', '2px solid #1a1a2e'),
+						A2($elm$html$Html$Attributes$style, 'margin', '0.6rem 0')
+					]),
+				_List_Nil),
+				A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+						A2($elm$html$Html$Attributes$style, 'justify-content', 'space-between'),
+						A2($elm$html$Html$Attributes$style, 'align-items', 'baseline')
+					]),
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$span,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'font-weight', '700'),
+								A2($elm$html$Html$Attributes$style, 'font-size', '0.95rem')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text('Total')
+							])),
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'text-align', 'right')
+							]),
+						_List_fromArray(
+							[
+								A2(
+								$elm$html$Html$div,
+								_List_fromArray(
+									[
+										A2($elm$html$Html$Attributes$style, 'font-size', '1.5rem'),
+										A2($elm$html$Html$Attributes$style, 'font-weight', '700'),
+										A2($elm$html$Html$Attributes$style, 'color', '#1a1a2e'),
+										A2($elm$html$Html$Attributes$style, 'line-height', '1')
+									]),
+								_List_fromArray(
+									[
+										$elm$html$Html$text(
+										$author$project$Main$fmt2(c.qTotal / 1000) + ' kW')
+									])),
+								A2(
+								$elm$html$Html$div,
+								_List_fromArray(
+									[
+										A2($elm$html$Html$Attributes$style, 'font-size', '0.78rem'),
+										A2($elm$html$Html$Attributes$style, 'color', '#888'),
+										A2($elm$html$Html$Attributes$style, 'margin-top', '0.2rem')
+									]),
+								_List_fromArray(
+									[
+										$elm$html$Html$text(
+										$elm$core$String$fromInt(
+											$elm$core$Basics$round(c.qTotal)) + ' W')
+									]))
+							]))
+					])),
+				A2(
+				$elm$html$Html$p,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'font-size', '0.75rem'),
+						A2($elm$html$Html$Attributes$style, 'color', '#888'),
+						A2($elm$html$Html$Attributes$style, 'margin-top', '0.5rem')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Setpoint 25 °C. Internal gains 4 W/m². Solar assumes internal blinds (×0.6).')
+					]))
+			]));
+};
 var $author$project$Main$geometryCard = F2(
 	function (model, r) {
 		return A3(
@@ -7909,60 +8327,79 @@ var $author$project$Main$pvCard = F2(
 						]))
 				]));
 	});
-var $author$project$Main$runningCard = function (u) {
-	return A3(
-		$author$project$Main$card,
-		'#f5f7ff',
-		'Annual Energy',
-		_List_fromArray(
-			[
-				A3(
-				$author$project$Main$detailRow,
-				'Gross heat demand',
-				$elm$core$String$fromInt(
-					$elm$core$Basics$round(u.annualHeatKwh)),
-				'kWh/yr'),
-				A3(
-				$author$project$Main$detailRow,
-				'Solar gain (incident)',
-				$elm$core$String$fromInt(
-					$elm$core$Basics$round(u.annualSolarGain)),
-				'kWh/yr'),
-				A3(
-				$author$project$Main$detailRow,
-				'  → useful (heating)',
-				'−' + $elm$core$String$fromInt(
-					$elm$core$Basics$round(u.annualUsefulGain)),
-				'kWh/yr'),
-				A3(
-				$author$project$Main$detailRow,
-				'  → excess (cooling load)',
-				$elm$core$String$fromInt(
-					$elm$core$Basics$round(u.annualExcessGain)),
-				'kWh/yr'),
-				A3(
-				$author$project$Main$detailRow,
-				'Net heat demand',
-				$elm$core$String$fromInt(
-					$elm$core$Basics$round(u.annualNetHeatKwh)),
-				'kWh/yr'),
-				A2(
-				$elm$html$Html$hr,
-				_List_fromArray(
-					[
-						A2($elm$html$Html$Attributes$style, 'border', 'none'),
-						A2($elm$html$Html$Attributes$style, 'border-top', '1px solid #dde3f0'),
-						A2($elm$html$Html$Attributes$style, 'margin', '0.4rem 0')
-					]),
-				_List_Nil),
-				A3(
-				$author$project$Main$detailRow,
-				'Electricity (HP)',
-				$elm$core$String$fromInt(
-					$elm$core$Basics$round(u.annualElecKwh)),
-				'kWh/yr')
-			]));
-};
+var $author$project$Main$runningCard = F3(
+	function (u, annualCoolKwh, annualCoolElec) {
+		return A3(
+			$author$project$Main$card,
+			'#f5f7ff',
+			'Annual Energy',
+			_List_fromArray(
+				[
+					A3(
+					$author$project$Main$detailRow,
+					'Gross heat demand',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(u.annualHeatKwh)),
+					'kWh/yr'),
+					A3(
+					$author$project$Main$detailRow,
+					'Solar gain (incident)',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(u.annualSolarGain)),
+					'kWh/yr'),
+					A3(
+					$author$project$Main$detailRow,
+					'  → useful (heating)',
+					'−' + $elm$core$String$fromInt(
+						$elm$core$Basics$round(u.annualUsefulGain)),
+					'kWh/yr'),
+					A3(
+					$author$project$Main$detailRow,
+					'  → excess (cooling load)',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(u.annualExcessGain)),
+					'kWh/yr'),
+					A3(
+					$author$project$Main$detailRow,
+					'Net heat demand',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(u.annualNetHeatKwh)),
+					'kWh/yr'),
+					A3(
+					$author$project$Main$detailRow,
+					'Cooling demand',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(annualCoolKwh)),
+					'kWh/yr'),
+					A2(
+					$elm$html$Html$hr,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'border', 'none'),
+							A2($elm$html$Html$Attributes$style, 'border-top', '1px solid #dde3f0'),
+							A2($elm$html$Html$Attributes$style, 'margin', '0.4rem 0')
+						]),
+					_List_Nil),
+					A3(
+					$author$project$Main$detailRow,
+					'Electricity (heating)',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(u.annualElecKwh)),
+					'kWh/yr'),
+					A3(
+					$author$project$Main$detailRow,
+					'Electricity (cooling, SCOP ' + ($author$project$Main$fmt1($author$project$Main$coolingScop) + ')'),
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(annualCoolElec)),
+					'kWh/yr'),
+					A3(
+					$author$project$Main$detailRow,
+					'Electricity (total)',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(u.annualElecKwh + annualCoolElec)),
+					'kWh/yr')
+				]));
+	});
 var $author$project$Main$ufhCard = F2(
 	function (model, u) {
 		var surfaceWarn = u.surfaceTemp > 29;
@@ -8087,10 +8524,10 @@ var $author$project$Main$resultsPanel = F2(
 						A2($author$project$Main$geometryCard, model, r),
 						$author$project$Main$heatLossCard(r),
 						function () {
-						var _v1 = A2($author$project$Main$calculateUFH, model, r);
+						var _v1 = A2($author$project$Main$calculateCooling, model, r);
 						if (_v1.$ === 'Just') {
-							var u = _v1.a;
-							return A2($author$project$Main$ufhCard, model, u);
+							var c = _v1.a;
+							return $author$project$Main$coolingCard(c);
 						} else {
 							return $elm$html$Html$text('');
 						}
@@ -8099,7 +8536,7 @@ var $author$project$Main$resultsPanel = F2(
 						var _v2 = A2($author$project$Main$calculateUFH, model, r);
 						if (_v2.$ === 'Just') {
 							var u = _v2.a;
-							return $author$project$Main$runningCard(u);
+							return A2($author$project$Main$ufhCard, model, u);
 						} else {
 							return $elm$html$Html$text('');
 						}
@@ -8107,10 +8544,46 @@ var $author$project$Main$resultsPanel = F2(
 						function () {
 						var _v3 = A2(
 							$elm$core$Maybe$andThen,
-							$author$project$Main$calculatePv(model),
+							function (u) {
+								return A2(
+									$elm$core$Maybe$map,
+									function (pv) {
+										return _Utils_Tuple2(u, pv);
+									},
+									A2($author$project$Main$calculatePv, model, u));
+							},
 							A2($author$project$Main$calculateUFH, model, r));
 						if (_v3.$ === 'Just') {
-							var p = _v3.a;
+							var _v4 = _v3.a;
+							var u = _v4.a;
+							var pv = _v4.b;
+							var rows = A4($author$project$Main$monthlyBreakdown, model, r, u, pv);
+							var annualCoolKwh = $elm$core$List$sum(
+								A2(
+									$elm$core$List$map,
+									function (row) {
+										return row.coolingKwh * row.daysInMonth;
+									},
+									rows));
+							var annualCoolElec = $elm$core$List$sum(
+								A2(
+									$elm$core$List$map,
+									function (row) {
+										return row.coolingElecKwh * row.daysInMonth;
+									},
+									rows));
+							return A3($author$project$Main$runningCard, u, annualCoolKwh, annualCoolElec);
+						} else {
+							return $elm$html$Html$text('');
+						}
+					}(),
+						function () {
+						var _v5 = A2(
+							$elm$core$Maybe$andThen,
+							$author$project$Main$calculatePv(model),
+							A2($author$project$Main$calculateUFH, model, r));
+						if (_v5.$ === 'Just') {
+							var p = _v5.a;
 							return A2($author$project$Main$pvCard, model, p);
 						} else {
 							return $elm$html$Html$text('');

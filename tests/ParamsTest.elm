@@ -128,6 +128,7 @@ suite =
                         -- confirming forward-compat still holds for this URL.
                         , gValue = "0.6"
                         , thermalMass = MediumMass
+                        , summerTempOut = "28"
                         }
                 in
                 decodeParams pinned
