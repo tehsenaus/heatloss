@@ -4370,13 +4370,47 @@ function _Browser_load(url)
 		}
 	}));
 }
-var $author$project$Main$FromN50 = {$: 'FromN50'};
-var $author$project$Main$SAP2012 = {$: 'SAP2012'};
-var $author$project$Main$Slight = {$: 'Slight'};
-var $author$project$Main$South = {$: 'South'};
-var $author$project$Main$Tile = {$: 'Tile'};
-var $author$project$Main$VaultedRoof = {$: 'VaultedRoof'};
-var $author$project$Main$init = {ach: '0.5', emitterDeltaT: '5', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, tempIn: '21', tempOut: '-3', totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
+
+
+
+var _Bitwise_and = F2(function(a, b)
+{
+	return a & b;
+});
+
+var _Bitwise_or = F2(function(a, b)
+{
+	return a | b;
+});
+
+var _Bitwise_xor = F2(function(a, b)
+{
+	return a ^ b;
+});
+
+function _Bitwise_complement(a)
+{
+	return ~a;
+};
+
+var _Bitwise_shiftLeftBy = F2(function(offset, a)
+{
+	return a << offset;
+});
+
+var _Bitwise_shiftRightBy = F2(function(offset, a)
+{
+	return a >> offset;
+});
+
+var _Bitwise_shiftRightZfBy = F2(function(offset, a)
+{
+	return a >>> offset;
+});
+var $elm$core$Maybe$Just = function (a) {
+	return {$: 'Just', a: a};
+};
+var $elm$core$Maybe$Nothing = {$: 'Nothing'};
 var $elm$core$Basics$EQ = {$: 'EQ'};
 var $elm$core$Basics$GT = {$: 'GT'};
 var $elm$core$Basics$LT = {$: 'LT'};
@@ -4480,10 +4514,6 @@ var $elm$json$Json$Decode$OneOf = function (a) {
 };
 var $elm$core$Basics$False = {$: 'False'};
 var $elm$core$Basics$add = _Basics_add;
-var $elm$core$Maybe$Just = function (a) {
-	return {$: 'Just', a: a};
-};
-var $elm$core$Maybe$Nothing = {$: 'Nothing'};
 var $elm$core$String$all = _String_all;
 var $elm$core$Basics$and = _Basics_and;
 var $elm$core$Basics$append = _Utils_append;
@@ -5165,29 +5195,387 @@ var $elm$core$Task$perform = F2(
 			$elm$core$Task$Perform(
 				A2($elm$core$Task$map, toMessage, task)));
 	});
+var $elm$browser$Browser$element = _Browser_element;
+var $elm$json$Json$Decode$float = _Json_decodeFloat;
+var $author$project$Main$FromN50 = {$: 'FromN50'};
+var $author$project$Main$SAP2012 = {$: 'SAP2012'};
+var $author$project$Main$Slight = {$: 'Slight'};
+var $author$project$Main$South = {$: 'South'};
+var $author$project$Main$Tile = {$: 'Tile'};
+var $author$project$Main$VaultedRoof = {$: 'VaultedRoof'};
+var $author$project$Main$defaultModel = {ach: '0.5', emitterDeltaT: '5', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, tempIn: '21', tempOut: '-3', totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
+var $author$project$Main$Carpet = {$: 'Carpet'};
+var $author$project$Main$Wood = {$: 'Wood'};
+var $elm$core$Basics$round = _Basics_round;
+var $author$project$Main$floorCoveringFromF = function (f) {
+	var _v0 = $elm$core$Basics$round(f);
+	switch (_v0) {
+		case 0:
+			return $author$project$Main$Tile;
+		case 1:
+			return $author$project$Main$Wood;
+		default:
+			return $author$project$Main$Carpet;
+	}
+};
+var $author$project$Main$floorCoveringToF = function (c) {
+	switch (c.$) {
+		case 'Tile':
+			return 0;
+		case 'Wood':
+			return 1;
+		default:
+			return 2;
+	}
+};
+var $elm$core$String$fromFloat = _String_fromNumber;
+var $author$project$Main$fromF = function (f) {
+	return $elm$core$String$fromFloat(
+		$elm$core$Basics$round(f * 10000) / 10000);
+};
+var $elm$core$Array$fromListHelp = F3(
+	function (list, nodeList, nodeListSize) {
+		fromListHelp:
+		while (true) {
+			var _v0 = A2($elm$core$Elm$JsArray$initializeFromList, $elm$core$Array$branchFactor, list);
+			var jsArray = _v0.a;
+			var remainingItems = _v0.b;
+			if (_Utils_cmp(
+				$elm$core$Elm$JsArray$length(jsArray),
+				$elm$core$Array$branchFactor) < 0) {
+				return A2(
+					$elm$core$Array$builderToArray,
+					true,
+					{nodeList: nodeList, nodeListSize: nodeListSize, tail: jsArray});
+			} else {
+				var $temp$list = remainingItems,
+					$temp$nodeList = A2(
+					$elm$core$List$cons,
+					$elm$core$Array$Leaf(jsArray),
+					nodeList),
+					$temp$nodeListSize = nodeListSize + 1;
+				list = $temp$list;
+				nodeList = $temp$nodeList;
+				nodeListSize = $temp$nodeListSize;
+				continue fromListHelp;
+			}
+		}
+	});
+var $elm$core$Array$fromList = function (list) {
+	if (!list.b) {
+		return $elm$core$Array$empty;
+	} else {
+		return A3($elm$core$Array$fromListHelp, list, _List_Nil, 0);
+	}
+};
+var $elm$core$Bitwise$and = _Bitwise_and;
+var $elm$core$Bitwise$shiftRightZfBy = _Bitwise_shiftRightZfBy;
+var $elm$core$Array$bitMask = 4294967295 >>> (32 - $elm$core$Array$shiftStep);
+var $elm$core$Basics$ge = _Utils_ge;
+var $elm$core$Elm$JsArray$unsafeGet = _JsArray_unsafeGet;
+var $elm$core$Array$getHelp = F3(
+	function (shift, index, tree) {
+		getHelp:
+		while (true) {
+			var pos = $elm$core$Array$bitMask & (index >>> shift);
+			var _v0 = A2($elm$core$Elm$JsArray$unsafeGet, pos, tree);
+			if (_v0.$ === 'SubTree') {
+				var subTree = _v0.a;
+				var $temp$shift = shift - $elm$core$Array$shiftStep,
+					$temp$index = index,
+					$temp$tree = subTree;
+				shift = $temp$shift;
+				index = $temp$index;
+				tree = $temp$tree;
+				continue getHelp;
+			} else {
+				var values = _v0.a;
+				return A2($elm$core$Elm$JsArray$unsafeGet, $elm$core$Array$bitMask & index, values);
+			}
+		}
+	});
+var $elm$core$Bitwise$shiftLeftBy = _Bitwise_shiftLeftBy;
+var $elm$core$Array$tailIndex = function (len) {
+	return (len >>> 5) << 5;
+};
+var $elm$core$Array$get = F2(
+	function (index, _v0) {
+		var len = _v0.a;
+		var startShift = _v0.b;
+		var tree = _v0.c;
+		var tail = _v0.d;
+		return ((index < 0) || (_Utils_cmp(index, len) > -1)) ? $elm$core$Maybe$Nothing : ((_Utils_cmp(
+			index,
+			$elm$core$Array$tailIndex(len)) > -1) ? $elm$core$Maybe$Just(
+			A2($elm$core$Elm$JsArray$unsafeGet, $elm$core$Array$bitMask & index, tail)) : $elm$core$Maybe$Just(
+			A3($elm$core$Array$getHelp, startShift, index, tree)));
+	});
+var $elm$core$Maybe$map = F2(
+	function (f, maybe) {
+		if (maybe.$ === 'Just') {
+			var value = maybe.a;
+			return $elm$core$Maybe$Just(
+				f(value));
+		} else {
+			return $elm$core$Maybe$Nothing;
+		}
+	});
+var $author$project$Main$HEM = {$: 'HEM'};
+var $author$project$Main$RuleOfThumb = {$: 'RuleOfThumb'};
+var $author$project$Main$n50MethodFromF = function (f) {
+	var _v0 = $elm$core$Basics$round(f);
+	switch (_v0) {
+		case 0:
+			return $author$project$Main$RuleOfThumb;
+		case 1:
+			return $author$project$Main$SAP2012;
+		default:
+			return $author$project$Main$HEM;
+	}
+};
+var $author$project$Main$n50MethodToF = function (m) {
+	switch (m.$) {
+		case 'RuleOfThumb':
+			return 0;
+		case 'SAP2012':
+			return 1;
+		default:
+			return 2;
+	}
+};
+var $author$project$Main$EastWest = {$: 'EastWest'};
+var $author$project$Main$North = {$: 'North'};
+var $author$project$Main$SouthEastWest = {$: 'SouthEastWest'};
+var $author$project$Main$orientationFromF = function (f) {
+	var _v0 = $elm$core$Basics$round(f);
+	switch (_v0) {
+		case 0:
+			return $author$project$Main$South;
+		case 1:
+			return $author$project$Main$SouthEastWest;
+		case 2:
+			return $author$project$Main$EastWest;
+		default:
+			return $author$project$Main$North;
+	}
+};
+var $author$project$Main$orientationToF = function (o) {
+	switch (o.$) {
+		case 'South':
+			return 0;
+		case 'SouthEastWest':
+			return 1;
+		case 'EastWest':
+			return 2;
+		default:
+			return 3;
+	}
+};
+var $author$project$Main$FlatRoof = {$: 'FlatRoof'};
+var $author$project$Main$roofTypeFromF = function (f) {
+	return (f < 0.5) ? $author$project$Main$FlatRoof : $author$project$Main$VaultedRoof;
+};
+var $author$project$Main$roofTypeToF = function (r) {
+	if (r.$ === 'FlatRoof') {
+		return 0;
+	} else {
+		return 1;
+	}
+};
+var $author$project$Main$Exposed = {$: 'Exposed'};
+var $author$project$Main$Heavy = {$: 'Heavy'};
+var $author$project$Main$Moderate = {$: 'Moderate'};
+var $author$project$Main$shelterFactorFromF = function (f) {
+	var _v0 = $elm$core$Basics$round(f);
+	switch (_v0) {
+		case 0:
+			return $author$project$Main$Exposed;
+		case 1:
+			return $author$project$Main$Slight;
+		case 2:
+			return $author$project$Main$Moderate;
+		default:
+			return $author$project$Main$Heavy;
+	}
+};
+var $author$project$Main$shelterFactorToF = function (s) {
+	switch (s.$) {
+		case 'Exposed':
+			return 0;
+		case 'Slight':
+			return 1;
+		case 'Moderate':
+			return 2;
+		default:
+			return 3;
+	}
+};
+var $author$project$Main$DirectACH = {$: 'DirectACH'};
+var $author$project$Main$ventModeFromF = function (f) {
+	return (f < 0.5) ? $author$project$Main$DirectACH : $author$project$Main$FromN50;
+};
+var $author$project$Main$ventModeToF = function (v) {
+	if (v.$ === 'DirectACH') {
+		return 0;
+	} else {
+		return 1;
+	}
+};
+var $elm$core$Maybe$withDefault = F2(
+	function (_default, maybe) {
+		if (maybe.$ === 'Just') {
+			var value = maybe.a;
+			return value;
+		} else {
+			return _default;
+		}
+	});
+var $author$project$Main$decodeParams = function (floats) {
+	var d = $author$project$Main$defaultModel;
+	var arr = $elm$core$Array$fromList(floats);
+	var getF = F2(
+		function (i, _default) {
+			return A2(
+				$elm$core$Maybe$withDefault,
+				_default,
+				A2($elm$core$Array$get, i, arr));
+		});
+	var getS = F2(
+		function (i, _default) {
+			return A2(
+				$elm$core$Maybe$withDefault,
+				_default,
+				A2(
+					$elm$core$Maybe$map,
+					$author$project$Main$fromF,
+					A2($elm$core$Array$get, i, arr)));
+		});
+	return {
+		ach: A2(getS, 12, d.ach),
+		emitterDeltaT: A2(getS, 21, d.emitterDeltaT),
+		floorCovering: $author$project$Main$floorCoveringFromF(
+			A2(
+				getF,
+				19,
+				$author$project$Main$floorCoveringToF(d.floorCovering))),
+		floorHeight: A2(getS, 2, d.floorHeight),
+		floorU: A2(getS, 7, d.floorU),
+		flowTemp: A2(getS, 20, d.flowTemp),
+		glazingPct: A2(getS, 8, d.glazingPct),
+		glazingU: A2(getS, 9, d.glazingU),
+		hdd: A2(getS, 22, d.hdd),
+		heatedFloorArea: A2(getS, 18, d.heatedFloorArea),
+		n50: A2(getS, 13, d.n50),
+		n50Method: $author$project$Main$n50MethodFromF(
+			A2(
+				getF,
+				14,
+				$author$project$Main$n50MethodToF(d.n50Method))),
+		numFloors: A2(getS, 1, d.numFloors),
+		pitchAngle: A2(getS, 4, d.pitchAngle),
+		pvIrradiation: A2(getS, 24, d.pvIrradiation),
+		pvKwp: A2(getS, 23, d.pvKwp),
+		pvOrientation: $author$project$Main$orientationFromF(
+			A2(
+				getF,
+				25,
+				$author$project$Main$orientationToF(d.pvOrientation))),
+		roofType: $author$project$Main$roofTypeFromF(
+			A2(
+				getF,
+				3,
+				$author$project$Main$roofTypeToF(d.roofType))),
+		roofU: A2(getS, 6, d.roofU),
+		shelterFactor: $author$project$Main$shelterFactorFromF(
+			A2(
+				getF,
+				15,
+				$author$project$Main$shelterFactorToF(d.shelterFactor))),
+		tempIn: A2(getS, 16, d.tempIn),
+		tempOut: A2(getS, 17, d.tempOut),
+		totalFloorArea: A2(getS, 0, d.totalFloorArea),
+		ventMode: $author$project$Main$ventModeFromF(
+			A2(
+				getF,
+				11,
+				$author$project$Main$ventModeToF(d.ventMode))),
+		wallU: A2(getS, 5, d.wallU),
+		yFactor: A2(getS, 10, d.yFactor)
+	};
+};
 var $elm$core$Platform$Cmd$batch = _Platform_batch;
 var $elm$core$Platform$Cmd$none = $elm$core$Platform$Cmd$batch(_List_Nil);
+var $author$project$Main$paramsVersion = 1;
+var $author$project$Main$init = function (flag) {
+	var model = function () {
+		if ((flag.$ === 'Just') && flag.a.b) {
+			var _v1 = flag.a;
+			var v = _v1.a;
+			var rest = _v1.b;
+			return _Utils_eq(v, $author$project$Main$paramsVersion) ? $author$project$Main$decodeParams(rest) : $author$project$Main$defaultModel;
+		} else {
+			return $author$project$Main$defaultModel;
+		}
+	}();
+	return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+};
+var $elm$json$Json$Decode$list = _Json_decodeList;
 var $elm$core$Platform$Sub$batch = _Platform_batch;
 var $elm$core$Platform$Sub$none = $elm$core$Platform$Sub$batch(_List_Nil);
-var $elm$browser$Browser$sandbox = function (impl) {
-	return _Browser_element(
-		{
-			init: function (_v0) {
-				return _Utils_Tuple2(impl.init, $elm$core$Platform$Cmd$none);
-			},
-			subscriptions: function (_v1) {
-				return $elm$core$Platform$Sub$none;
-			},
-			update: F2(
-				function (msg, model) {
-					return _Utils_Tuple2(
-						A2(impl.update, msg, model),
-						$elm$core$Platform$Cmd$none);
-				}),
-			view: impl.view
-		});
+var $elm$json$Json$Decode$null = _Json_decodeNull;
+var $elm$json$Json$Decode$oneOf = _Json_oneOf;
+var $elm$core$String$toFloat = _String_toFloat;
+var $author$project$Main$toF = function (s) {
+	return A2(
+		$elm$core$Maybe$withDefault,
+		0,
+		$elm$core$String$toFloat(s));
 };
-var $author$project$Main$update = F2(
+var $author$project$Main$encodeParams = function (m) {
+	return _List_fromArray(
+		[
+			$author$project$Main$toF(m.totalFloorArea),
+			$author$project$Main$toF(m.numFloors),
+			$author$project$Main$toF(m.floorHeight),
+			$author$project$Main$roofTypeToF(m.roofType),
+			$author$project$Main$toF(m.pitchAngle),
+			$author$project$Main$toF(m.wallU),
+			$author$project$Main$toF(m.roofU),
+			$author$project$Main$toF(m.floorU),
+			$author$project$Main$toF(m.glazingPct),
+			$author$project$Main$toF(m.glazingU),
+			$author$project$Main$toF(m.yFactor),
+			$author$project$Main$ventModeToF(m.ventMode),
+			$author$project$Main$toF(m.ach),
+			$author$project$Main$toF(m.n50),
+			$author$project$Main$n50MethodToF(m.n50Method),
+			$author$project$Main$shelterFactorToF(m.shelterFactor),
+			$author$project$Main$toF(m.tempIn),
+			$author$project$Main$toF(m.tempOut),
+			$author$project$Main$toF(m.heatedFloorArea),
+			$author$project$Main$floorCoveringToF(m.floorCovering),
+			$author$project$Main$toF(m.flowTemp),
+			$author$project$Main$toF(m.emitterDeltaT),
+			$author$project$Main$toF(m.hdd),
+			$author$project$Main$toF(m.pvKwp),
+			$author$project$Main$toF(m.pvIrradiation),
+			$author$project$Main$orientationToF(m.pvOrientation)
+		]);
+};
+var $elm$json$Json$Encode$float = _Json_wrap;
+var $elm$json$Json$Encode$list = F2(
+	function (func, entries) {
+		return _Json_wrap(
+			A3(
+				$elm$core$List$foldl,
+				_Json_addEntry(func),
+				_Json_emptyArray(_Utils_Tuple0),
+				entries));
+	});
+var $author$project$Main$saveParams = _Platform_outgoingPort(
+	'saveParams',
+	$elm$json$Json$Encode$list($elm$json$Json$Encode$float));
+var $author$project$Main$updateField = F2(
 	function (msg, model) {
 		switch (msg.$) {
 			case 'SetTotalFloorArea':
@@ -5322,6 +5710,17 @@ var $author$project$Main$update = F2(
 					{pvOrientation: o});
 		}
 	});
+var $author$project$Main$update = F2(
+	function (msg, model) {
+		var newModel = A2($author$project$Main$updateField, msg, model);
+		return _Utils_Tuple2(
+			newModel,
+			$author$project$Main$saveParams(
+				A2(
+					$elm$core$List$cons,
+					$author$project$Main$paramsVersion,
+					$author$project$Main$encodeParams(newModel))));
+	});
 var $elm$core$Maybe$andThen = F2(
 	function (callback, maybeValue) {
 		if (maybeValue.$ === 'Just') {
@@ -5336,17 +5735,6 @@ var $elm$core$Basics$clamp = F3(
 		return (_Utils_cmp(number, low) < 0) ? low : ((_Utils_cmp(number, high) > 0) ? high : number);
 	});
 var $elm$core$Basics$cos = _Basics_cos;
-var $author$project$Main$HEM = {$: 'HEM'};
-var $elm$core$Maybe$map = F2(
-	function (f, maybe) {
-		if (maybe.$ === 'Just') {
-			var value = maybe.a;
-			return $elm$core$Maybe$Just(
-				f(value));
-		} else {
-			return $elm$core$Maybe$Nothing;
-		}
-	});
 var $author$project$Main$shelterMultiplier = function (s) {
 	switch (s.$) {
 		case 'Exposed':
@@ -5359,7 +5747,6 @@ var $author$project$Main$shelterMultiplier = function (s) {
 			return 0.7;
 	}
 };
-var $elm$core$String$toFloat = _String_toFloat;
 var $author$project$Main$windFactor = function (method) {
 	switch (method.$) {
 		case 'RuleOfThumb':
@@ -5391,22 +5778,12 @@ var $author$project$Main$effectiveACH = function (m) {
 			$elm$core$String$toFloat(m.n50));
 	}
 };
-var $elm$core$Basics$ge = _Utils_ge;
 var $elm$core$Basics$sqrt = _Basics_sqrt;
 var $elm$core$Basics$tan = _Basics_tan;
 var $elm$core$Basics$pi = _Basics_pi;
 var $author$project$Main$toRad = function (deg) {
 	return (deg * $elm$core$Basics$pi) / 180;
 };
-var $elm$core$Maybe$withDefault = F2(
-	function (_default, maybe) {
-		if (maybe.$ === 'Just') {
-			var value = maybe.a;
-			return value;
-		} else {
-			return _default;
-		}
-	});
 var $author$project$Main$calculate = function (m) {
 	return A2(
 		$elm$core$Maybe$andThen,
@@ -5700,8 +6077,6 @@ var $author$project$Main$inputSection = F2(
 					A2($elm$html$Html$div, _List_Nil, rows)
 				]));
 	});
-var $author$project$Main$EastWest = {$: 'EastWest'};
-var $author$project$Main$North = {$: 'North'};
 var $author$project$Main$SetPvIrradiation = function (a) {
 	return {$: 'SetPvIrradiation', a: a};
 };
@@ -5711,7 +6086,6 @@ var $author$project$Main$SetPvKwp = function (a) {
 var $author$project$Main$SetPvOrientation = function (a) {
 	return {$: 'SetPvOrientation', a: a};
 };
-var $author$project$Main$SouthEastWest = {$: 'SouthEastWest'};
 var $author$project$Main$orientationLabel = function (o) {
 	switch (o.$) {
 		case 'South':
@@ -5850,7 +6224,6 @@ var $author$project$Main$pvSection = function (m) {
 					]))
 			]));
 };
-var $author$project$Main$FlatRoof = {$: 'FlatRoof'};
 var $author$project$Main$SetPitchAngle = function (a) {
 	return {$: 'SetPitchAngle', a: a};
 };
@@ -5943,7 +6316,6 @@ var $author$project$Main$roofSection = function (m) {
 			}()
 			]));
 };
-var $author$project$Main$Carpet = {$: 'Carpet'};
 var $author$project$Main$SetEmitterDeltaT = function (a) {
 	return {$: 'SetEmitterDeltaT', a: a};
 };
@@ -5956,7 +6328,6 @@ var $author$project$Main$SetFlowTemp = function (a) {
 var $author$project$Main$SetHeatedFloorArea = function (a) {
 	return {$: 'SetHeatedFloorArea', a: a};
 };
-var $author$project$Main$Wood = {$: 'Wood'};
 var $author$project$Main$floorLabel = function (c) {
 	switch (c.$) {
 		case 'Tile':
@@ -6030,17 +6401,12 @@ var $author$project$Main$ufhSection = function (m) {
 				A6($author$project$Main$inputRow, 'Emitter ΔT', 'K', m.emitterDeltaT, $author$project$Main$SetEmitterDeltaT, '1', '1')
 			]));
 };
-var $author$project$Main$DirectACH = {$: 'DirectACH'};
 var $author$project$Main$SetACH = function (a) {
 	return {$: 'SetACH', a: a};
 };
 var $author$project$Main$SetVentMode = function (a) {
 	return {$: 'SetVentMode', a: a};
 };
-var $author$project$Main$Exposed = {$: 'Exposed'};
-var $author$project$Main$Heavy = {$: 'Heavy'};
-var $author$project$Main$Moderate = {$: 'Moderate'};
-var $author$project$Main$RuleOfThumb = {$: 'RuleOfThumb'};
 var $author$project$Main$SetN50 = function (a) {
 	return {$: 'SetN50', a: a};
 };
@@ -6575,8 +6941,6 @@ var $author$project$Main$monthlyBreakdown = F2(
 			$author$project$Main$pvFractions,
 			$author$project$Main$daylightHours);
 	});
-var $elm$core$String$fromFloat = _String_fromNumber;
-var $elm$core$Basics$round = _Basics_round;
 var $author$project$Main$monthlyChart = F2(
 	function (rows, maxVal) {
 		var chartH = 180.0;
@@ -7427,7 +7791,22 @@ var $author$project$Main$view = function (model) {
 				$author$project$Main$calculate(model))
 			]));
 };
-var $author$project$Main$main = $elm$browser$Browser$sandbox(
-	{init: $author$project$Main$init, update: $author$project$Main$update, view: $author$project$Main$view});
+var $author$project$Main$main = $elm$browser$Browser$element(
+	{
+		init: $author$project$Main$init,
+		subscriptions: function (_v0) {
+			return $elm$core$Platform$Sub$none;
+		},
+		update: $author$project$Main$update,
+		view: $author$project$Main$view
+	});
 _Platform_export({'Main':{'init':$author$project$Main$main(
-	$elm$json$Json$Decode$succeed(_Utils_Tuple0))(0)}});}(this));
+	$elm$json$Json$Decode$oneOf(
+		_List_fromArray(
+			[
+				$elm$json$Json$Decode$null($elm$core$Maybe$Nothing),
+				A2(
+				$elm$json$Json$Decode$map,
+				$elm$core$Maybe$Just,
+				$elm$json$Json$Decode$list($elm$json$Json$Decode$float))
+			])))(0)}});}(this));

@@ -1,14 +1,36 @@
-module Main exposing (main)
+port module Main exposing
+    ( FloorCovering(..)
+    , Model
+    , N50Method(..)
+    , Orientation(..)
+    , RoofType(..)
+    , ShelterFactor(..)
+    , VentMode(..)
+    , decodeParams
+    , defaultModel
+    , encodeParams
+    , main
+    , paramsVersion
+    )
 
+import Array
 import Browser
 import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 
 
-main : Program () Model Msg
+port saveParams : List Float -> Cmd msg
+
+
+main : Program (Maybe (List Float)) Model Msg
 main =
-    Browser.sandbox { init = init, update = update, view = view }
+    Browser.element
+        { init = init
+        , update = update
+        , view = view
+        , subscriptions = \_ -> Sub.none
+        }
 
 
 
@@ -167,8 +189,31 @@ type alias Model =
     }
 
 
-init : Model
-init =
+paramsVersion : Float
+paramsVersion =
+    1
+
+
+init : Maybe (List Float) -> ( Model, Cmd Msg )
+init flag =
+    let
+        model =
+            case flag of
+                Just (v :: rest) ->
+                    if v == paramsVersion then
+                        decodeParams rest
+
+                    else
+                        defaultModel
+
+                _ ->
+                    defaultModel
+    in
+    ( model, Cmd.none )
+
+
+defaultModel : Model
+defaultModel =
     { totalFloorArea = "300"
     , numFloors = "2.5"
     , floorHeight = "2.5"
@@ -195,6 +240,187 @@ init =
     , pvKwp = "4"
     , pvIrradiation = "990"
     , pvOrientation = South
+    }
+
+
+
+-- PARAMS ENCODE / DECODE
+
+
+toF : String -> Float
+toF s =
+    String.toFloat s |> Maybe.withDefault 0
+
+
+fromF : Float -> String
+fromF f =
+    String.fromFloat (toFloat (round (f * 10000)) / 10000)
+
+
+roofTypeToF : RoofType -> Float
+roofTypeToF r =
+    case r of
+        FlatRoof    -> 0
+        VaultedRoof -> 1
+
+
+roofTypeFromF : Float -> RoofType
+roofTypeFromF f =
+    if f < 0.5 then FlatRoof else VaultedRoof
+
+
+ventModeToF : VentMode -> Float
+ventModeToF v =
+    case v of
+        DirectACH -> 0
+        FromN50   -> 1
+
+
+ventModeFromF : Float -> VentMode
+ventModeFromF f =
+    if f < 0.5 then DirectACH else FromN50
+
+
+n50MethodToF : N50Method -> Float
+n50MethodToF m =
+    case m of
+        RuleOfThumb -> 0
+        SAP2012     -> 1
+        HEM         -> 2
+
+
+n50MethodFromF : Float -> N50Method
+n50MethodFromF f =
+    case round f of
+        0 -> RuleOfThumb
+        1 -> SAP2012
+        _ -> HEM
+
+
+shelterFactorToF : ShelterFactor -> Float
+shelterFactorToF s =
+    case s of
+        Exposed  -> 0
+        Slight   -> 1
+        Moderate -> 2
+        Heavy    -> 3
+
+
+shelterFactorFromF : Float -> ShelterFactor
+shelterFactorFromF f =
+    case round f of
+        0 -> Exposed
+        1 -> Slight
+        2 -> Moderate
+        _ -> Heavy
+
+
+floorCoveringToF : FloorCovering -> Float
+floorCoveringToF c =
+    case c of
+        Tile   -> 0
+        Wood   -> 1
+        Carpet -> 2
+
+
+floorCoveringFromF : Float -> FloorCovering
+floorCoveringFromF f =
+    case round f of
+        0 -> Tile
+        1 -> Wood
+        _ -> Carpet
+
+
+orientationToF : Orientation -> Float
+orientationToF o =
+    case o of
+        South         -> 0
+        SouthEastWest -> 1
+        EastWest      -> 2
+        North         -> 3
+
+
+orientationFromF : Float -> Orientation
+orientationFromF f =
+    case round f of
+        0 -> South
+        1 -> SouthEastWest
+        2 -> EastWest
+        _ -> North
+
+
+encodeParams : Model -> List Float
+encodeParams m =
+    [ toF m.totalFloorArea
+    , toF m.numFloors
+    , toF m.floorHeight
+    , roofTypeToF m.roofType
+    , toF m.pitchAngle
+    , toF m.wallU
+    , toF m.roofU
+    , toF m.floorU
+    , toF m.glazingPct
+    , toF m.glazingU
+    , toF m.yFactor
+    , ventModeToF m.ventMode
+    , toF m.ach
+    , toF m.n50
+    , n50MethodToF m.n50Method
+    , shelterFactorToF m.shelterFactor
+    , toF m.tempIn
+    , toF m.tempOut
+    , toF m.heatedFloorArea
+    , floorCoveringToF m.floorCovering
+    , toF m.flowTemp
+    , toF m.emitterDeltaT
+    , toF m.hdd
+    , toF m.pvKwp
+    , toF m.pvIrradiation
+    , orientationToF m.pvOrientation
+    ]
+
+
+decodeParams : List Float -> Model
+decodeParams floats =
+    let
+        arr = Array.fromList floats
+
+        getF : Int -> Float -> Float
+        getF i default =
+            Array.get i arr |> Maybe.withDefault default
+
+        getS : Int -> String -> String
+        getS i default =
+            Array.get i arr |> Maybe.map fromF |> Maybe.withDefault default
+
+        d = defaultModel
+    in
+    { totalFloorArea  = getS 0  d.totalFloorArea
+    , numFloors       = getS 1  d.numFloors
+    , floorHeight     = getS 2  d.floorHeight
+    , roofType        = roofTypeFromF (getF 3 (roofTypeToF d.roofType))
+    , pitchAngle      = getS 4  d.pitchAngle
+    , wallU           = getS 5  d.wallU
+    , roofU           = getS 6  d.roofU
+    , floorU          = getS 7  d.floorU
+    , glazingPct      = getS 8  d.glazingPct
+    , glazingU        = getS 9  d.glazingU
+    , yFactor         = getS 10 d.yFactor
+    , ventMode        = ventModeFromF (getF 11 (ventModeToF d.ventMode))
+    , ach             = getS 12 d.ach
+    , n50             = getS 13 d.n50
+    , n50Method       = n50MethodFromF (getF 14 (n50MethodToF d.n50Method))
+    , shelterFactor   = shelterFactorFromF (getF 15 (shelterFactorToF d.shelterFactor))
+    , tempIn          = getS 16 d.tempIn
+    , tempOut         = getS 17 d.tempOut
+    , heatedFloorArea = getS 18 d.heatedFloorArea
+    , floorCovering   = floorCoveringFromF (getF 19 (floorCoveringToF d.floorCovering))
+    , flowTemp        = getS 20 d.flowTemp
+    , emitterDeltaT   = getS 21 d.emitterDeltaT
+    , hdd             = getS 22 d.hdd
+    , pvKwp           = getS 23 d.pvKwp
+    , pvIrradiation   = getS 24 d.pvIrradiation
+    , pvOrientation   = orientationFromF (getF 25 (orientationToF d.pvOrientation))
     }
 
 
@@ -231,8 +457,17 @@ type Msg
     | SetPvOrientation Orientation
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
+    let
+        newModel =
+            updateField msg model
+    in
+    ( newModel, saveParams (paramsVersion :: encodeParams newModel) )
+
+
+updateField : Msg -> Model -> Model
+updateField msg model =
     case msg of
         SetTotalFloorArea v -> { model | totalFloorArea = v }
         SetNumFloors v      -> { model | numFloors = v }
