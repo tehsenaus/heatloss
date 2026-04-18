@@ -5204,7 +5204,7 @@ var $author$project$Main$Slight = {$: 'Slight'};
 var $author$project$Main$South = {$: 'South'};
 var $author$project$Main$Tile = {$: 'Tile'};
 var $author$project$Main$VaultedRoof = {$: 'VaultedRoof'};
-var $author$project$Main$defaultModel = {ach: '0.5', emitterDeltaT: '5', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', gValue: '0.6', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, summerTempOut: '28', tempIn: '21', tempOut: '-3', thermalMass: $author$project$Main$MediumMass, totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
+var $author$project$Main$defaultModel = {ach: '0.5', emitterDeltaT: '5', evMilesPerYear: '8000', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', gValue: '0.6', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', householdElecKwh: '3500', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, summerTempOut: '28', tempIn: '21', tempOut: '-3', thermalMass: $author$project$Main$MediumMass, totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
 var $author$project$Main$Carpet = {$: 'Carpet'};
 var $author$project$Main$Wood = {$: 'Wood'};
 var $elm$core$Basics$round = _Basics_round;
@@ -5477,6 +5477,7 @@ var $author$project$Main$decodeParams = function (floats) {
 	return {
 		ach: A2(getS, 12, d.ach),
 		emitterDeltaT: A2(getS, 21, d.emitterDeltaT),
+		evMilesPerYear: A2(getS, 30, d.evMilesPerYear),
 		floorCovering: $author$project$Main$floorCoveringFromF(
 			A2(
 				getF,
@@ -5490,6 +5491,7 @@ var $author$project$Main$decodeParams = function (floats) {
 		glazingU: A2(getS, 9, d.glazingU),
 		hdd: A2(getS, 22, d.hdd),
 		heatedFloorArea: A2(getS, 18, d.heatedFloorArea),
+		householdElecKwh: A2(getS, 29, d.householdElecKwh),
 		n50: A2(getS, 13, d.n50),
 		n50Method: $author$project$Main$n50MethodFromF(
 			A2(
@@ -5593,7 +5595,9 @@ var $author$project$Main$encodeParams = function (m) {
 			$author$project$Main$orientationToF(m.pvOrientation),
 			$author$project$Main$toF(m.gValue),
 			$author$project$Main$thermalMassToF(m.thermalMass),
-			$author$project$Main$toF(m.summerTempOut)
+			$author$project$Main$toF(m.summerTempOut),
+			$author$project$Main$toF(m.householdElecKwh),
+			$author$project$Main$toF(m.evMilesPerYear)
 		]);
 };
 var $elm$json$Json$Encode$float = _Json_wrap;
@@ -5752,11 +5756,21 @@ var $author$project$Main$updateField = F2(
 				return _Utils_update(
 					model,
 					{thermalMass: t});
-			default:
+			case 'SetSummerTempOut':
 				var v = msg.a;
 				return _Utils_update(
 					model,
 					{summerTempOut: v});
+			case 'SetHouseholdElecKwh':
+				var v = msg.a;
+				return _Utils_update(
+					model,
+					{householdElecKwh: v});
+			default:
+				var v = msg.a;
+				return _Utils_update(
+					model,
+					{evMilesPerYear: v});
 		}
 	});
 var $author$project$Main$update = F2(
@@ -5949,6 +5963,9 @@ var $author$project$Main$calculate = function (m) {
 };
 var $elm$html$Html$div = _VirtualDom_node('div');
 var $elm$html$Html$h1 = _VirtualDom_node('h1');
+var $author$project$Main$SetEvMilesPerYear = function (a) {
+	return {$: 'SetEvMilesPerYear', a: a};
+};
 var $author$project$Main$SetFloorHeight = function (a) {
 	return {$: 'SetFloorHeight', a: a};
 };
@@ -5966,6 +5983,9 @@ var $author$project$Main$SetGlazingU = function (a) {
 };
 var $author$project$Main$SetHDD = function (a) {
 	return {$: 'SetHDD', a: a};
+};
+var $author$project$Main$SetHouseholdElecKwh = function (a) {
+	return {$: 'SetHouseholdElecKwh', a: a};
 };
 var $author$project$Main$SetNumFloors = function (a) {
 	return {$: 'SetNumFloors', a: a};
@@ -6789,6 +6809,14 @@ var $author$project$Main$inputsPanel = function (m) {
 					[
 						A6($author$project$Main$inputRow, 'Heating degree days', '°C·d', m.hdd, $author$project$Main$SetHDD, '0', '50')
 					])),
+				A2(
+				$author$project$Main$inputSection,
+				'Other Electricity',
+				_List_fromArray(
+					[
+						A6($author$project$Main$inputRow, 'Household baseload', 'kWh/yr', m.householdElecKwh, $author$project$Main$SetHouseholdElecKwh, '0', '100'),
+						A6($author$project$Main$inputRow, 'EV mileage', 'mi/yr', m.evMilesPerYear, $author$project$Main$SetEvMilesPerYear, '0', '500')
+					])),
 				$author$project$Main$pvSection(m)
 			]));
 };
@@ -7068,7 +7096,9 @@ var $author$project$Main$chartLegend = A2(
 			A2($author$project$Main$legendSwatch, '#2e7d32', 'PV generation (day)'),
 			A2($author$project$Main$legendSwatch, '#c77700', 'HP demand — day'),
 			A2($author$project$Main$legendSwatch, '#6a4b8a', 'HP demand — night'),
-			A2($author$project$Main$legendSwatch, '#3b82c4', 'HP demand — cooling')
+			A2($author$project$Main$legendSwatch, '#3b82c4', 'HP demand — cooling'),
+			A2($author$project$Main$legendSwatch, '#888888', 'Household'),
+			A2($author$project$Main$legendSwatch, '#444466', 'EV')
 		]));
 var $elm$core$List$maximum = function (list) {
 	if (list.b) {
@@ -7476,6 +7506,9 @@ var $author$project$Main$daylightHours = _List_fromArray(
 var $author$project$Main$daysInMonth = _List_fromArray(
 	[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]);
 var $author$project$Main$diurnalSwing = 3;
+var $author$project$Main$evWhPerMile = function (avgTempC) {
+	return A3($elm$core$Basics$clamp, 250, 350, 350 - ((avgTempC - 4.5) * (100 / 12)));
+};
 var $author$project$Main$internalGainDayFrac = 0.6;
 var $author$project$Main$internalGainsWperM2 = 4;
 var $elm$core$List$map5 = _List_map5;
@@ -7500,6 +7533,16 @@ var $author$project$Main$monthlyBreakdown = F4(
 			$elm$core$Maybe$withDefault,
 			$author$project$Main$coolingSetpoint,
 			$elm$core$String$toFloat(m.tempIn));
+		var annualHousehold = A2(
+			$elm$core$Maybe$withDefault,
+			0,
+			$elm$core$String$toFloat(m.householdElecKwh));
+		var householdDaily = annualHousehold / 365;
+		var annualEvMiles = A2(
+			$elm$core$Maybe$withDefault,
+			0,
+			$elm$core$String$toFloat(m.evMilesPerYear));
+		var milesPerDay = annualEvMiles / 365;
 		return A6(
 			$elm$core$List$map5,
 			F5(
@@ -7517,6 +7560,7 @@ var $author$project$Main$monthlyBreakdown = F4(
 					var netElec = (u.scop > 0) ? (netHeat / u.scop) : 0;
 					var freeCoolNight = ((ua * A2($elm$core$Basics$max, 0, coolTarget - nightT)) * nightHours) / 1000;
 					var excessSolarDay = (gain - useful) / days;
+					var evDaily = (milesPerDay * $author$project$Main$evWhPerMile(avgT)) / 1000;
 					var dayT = avgT + $author$project$Main$diurnalSwing;
 					var dayHours = dl;
 					var freeCoolDay = ((ua * A2($elm$core$Basics$max, 0, coolTarget - dayT)) * dayHours) / 1000;
@@ -7525,7 +7569,7 @@ var $author$project$Main$monthlyBreakdown = F4(
 					var coolingDayDemand = A2($elm$core$Basics$max, 0, (excessSolarDay + internalDay) - freeCoolDay);
 					var coolingDaily = coolingDayDemand + coolingNightDemand;
 					var coolingElec = coolingDaily / $author$project$Main$coolingScop;
-					return {coolingElecKwh: coolingElec, coolingKwh: coolingDaily, daysInMonth: days, demandDayKwh: (netElec * dayFrac) / days, demandNightKwh: (netElec * (1 - dayFrac)) / days, grossHeatKwh: grossHeat / days, month: name, pvKwh: (pv.annualKwh * pvF) / days, solarGainKwh: gain / days, usefulGainKwh: useful / days};
+					return {coolingElecKwh: coolingElec, coolingKwh: coolingDaily, daysInMonth: days, demandDayKwh: (netElec * dayFrac) / days, demandNightKwh: (netElec * (1 - dayFrac)) / days, evKwh: evDaily, grossHeatKwh: grossHeat / days, householdKwh: householdDaily, month: name, pvKwh: (pv.annualKwh * pvF) / days, solarGainKwh: gain / days, usefulGainKwh: useful / days};
 				}),
 			$author$project$Main$monthNames,
 			A3($elm$core$List$map2, $elm$core$Tuple$pair, $author$project$Main$hddFractions, $author$project$Main$pvFractions),
@@ -7578,9 +7622,11 @@ var $author$project$Main$monthlyChart = F2(
 		var column = function (row) {
 			var pvH = (row.pvKwh * chartH) / maxVal;
 			var nightH = (row.demandNightKwh * chartH) / maxVal;
+			var householdH = (row.householdKwh * chartH) / maxVal;
+			var evH = (row.evKwh * chartH) / maxVal;
 			var dayH = (row.demandDayKwh * chartH) / maxVal;
 			var coolH = (row.coolingElecKwh * chartH) / maxVal;
-			var demandH = (dayH + nightH) + coolH;
+			var demandH = (((dayH + nightH) + coolH) + householdH) + evH;
 			return A2(
 				$elm$html$Html$div,
 				_List_fromArray(
@@ -7624,7 +7670,9 @@ var $author$project$Main$monthlyChart = F2(
 									[
 										A2(bar, '#c77700', dayH),
 										A2(bar, '#6a4b8a', nightH),
-										A2(bar, '#3b82c4', coolH)
+										A2(bar, '#3b82c4', coolH),
+										A2(bar, '#888888', householdH),
+										A2(bar, '#444466', evH)
 									]))
 							])),
 						A2(
@@ -7714,7 +7762,7 @@ var $author$project$Main$monthlyChartSection = F2(
 					A2(
 						$elm$core$List$map,
 						function (m) {
-							return A2($elm$core$Basics$max, m.pvKwh, (m.demandDayKwh + m.demandNightKwh) + m.coolingElecKwh);
+							return A2($elm$core$Basics$max, m.pvKwh, (((m.demandDayKwh + m.demandNightKwh) + m.coolingElecKwh) + m.householdKwh) + m.evKwh);
 						},
 						rows)));
 			return A2(
@@ -8327,8 +8375,9 @@ var $author$project$Main$pvCard = F2(
 						]))
 				]));
 	});
-var $author$project$Main$runningCard = F3(
-	function (u, annualCoolKwh, annualCoolElec) {
+var $author$project$Main$runningCard = F5(
+	function (u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh) {
+		var totalElec = ((u.annualElecKwh + annualCoolElec) + annualHouseholdKwh) + annualEvKwh;
 		return A3(
 			$author$project$Main$card,
 			'#f5f7ff',
@@ -8394,9 +8443,21 @@ var $author$project$Main$runningCard = F3(
 					'kWh/yr'),
 					A3(
 					$author$project$Main$detailRow,
+					'Electricity (household)',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(annualHouseholdKwh)),
+					'kWh/yr'),
+					A3(
+					$author$project$Main$detailRow,
+					'Electricity (EV)',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(annualEvKwh)),
+					'kWh/yr'),
+					A3(
+					$author$project$Main$detailRow,
 					'Electricity (total)',
 					$elm$core$String$fromInt(
-						$elm$core$Basics$round(u.annualElecKwh + annualCoolElec)),
+						$elm$core$Basics$round(totalElec)),
 					'kWh/yr')
 				]));
 	});
@@ -8558,6 +8619,20 @@ var $author$project$Main$resultsPanel = F2(
 							var u = _v4.a;
 							var pv = _v4.b;
 							var rows = A4($author$project$Main$monthlyBreakdown, model, r, u, pv);
+							var annualHouseholdKwh = $elm$core$List$sum(
+								A2(
+									$elm$core$List$map,
+									function (row) {
+										return row.householdKwh * row.daysInMonth;
+									},
+									rows));
+							var annualEvKwh = $elm$core$List$sum(
+								A2(
+									$elm$core$List$map,
+									function (row) {
+										return row.evKwh * row.daysInMonth;
+									},
+									rows));
 							var annualCoolKwh = $elm$core$List$sum(
 								A2(
 									$elm$core$List$map,
@@ -8572,7 +8647,7 @@ var $author$project$Main$resultsPanel = F2(
 										return row.coolingElecKwh * row.daysInMonth;
 									},
 									rows));
-							return A3($author$project$Main$runningCard, u, annualCoolKwh, annualCoolElec);
+							return A5($author$project$Main$runningCard, u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh);
 						} else {
 							return $elm$html$Html$text('');
 						}

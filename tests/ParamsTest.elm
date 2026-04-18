@@ -129,6 +129,8 @@ suite =
                         , gValue = "0.6"
                         , thermalMass = MediumMass
                         , summerTempOut = "28"
+                        , householdElecKwh = "3500"
+                        , evMilesPerYear = "8000"
                         }
                 in
                 decodeParams pinned

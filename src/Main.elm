@@ -232,6 +232,8 @@ type alias Model =
     , gValue : String
     , thermalMass : ThermalMass
     , summerTempOut : String
+    , householdElecKwh : String
+    , evMilesPerYear : String
     }
 
 
@@ -289,6 +291,8 @@ defaultModel =
     , gValue = "0.6"
     , thermalMass = MediumMass
     , summerTempOut = "28"
+    , householdElecKwh = "3500"
+    , evMilesPerYear = "8000"
     }
 
 
@@ -445,6 +449,8 @@ encodeParams m =
     , toF m.gValue
     , thermalMassToF m.thermalMass
     , toF m.summerTempOut
+    , toF m.householdElecKwh
+    , toF m.evMilesPerYear
     ]
 
 
@@ -492,6 +498,8 @@ decodeParams floats =
     , gValue          = getS 26 d.gValue
     , thermalMass     = thermalMassFromF (getF 27 (thermalMassToF d.thermalMass))
     , summerTempOut   = getS 28 d.summerTempOut
+    , householdElecKwh = getS 29 d.householdElecKwh
+    , evMilesPerYear  = getS 30 d.evMilesPerYear
     }
 
 
@@ -529,6 +537,8 @@ type Msg
     | SetGValue String
     | SetThermalMass ThermalMass
     | SetSummerTempOut String
+    | SetHouseholdElecKwh String
+    | SetEvMilesPerYear String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -572,6 +582,8 @@ updateField msg model =
         SetGValue v         -> { model | gValue = v }
         SetThermalMass t    -> { model | thermalMass = t }
         SetSummerTempOut v  -> { model | summerTempOut = v }
+        SetHouseholdElecKwh v -> { model | householdElecKwh = v }
+        SetEvMilesPerYear v -> { model | evMilesPerYear = v }
 
 
 
@@ -644,6 +656,15 @@ diurnalSwing =
 coolingScop : Float
 coolingScop =
     3.5
+
+
+-- EV efficiency (Wh/mile) by monthly avg outdoor temp. Cold weather hurts
+-- range via battery, cabin heating, and tyre/aero losses; hot weather adds
+-- A/C overhead but is milder. Mapped linearly between 350 (Jan, ~4.5°C)
+-- and 250 (Jul, ~16.5°C) Wh/mile, clamped at the extremes.
+evWhPerMile : Float -> Float
+evWhPerMile avgTempC =
+    Basics.clamp 250 350 (350 - (avgTempC - 4.5) * (100 / 12))
 
 
 -- Internal gain split day/night. Occupants/cooking/lighting peak during
@@ -1038,6 +1059,8 @@ type alias MonthlyRow =
     , usefulGainKwh  : Float
     , coolingKwh     : Float
     , coolingElecKwh : Float
+    , householdKwh   : Float
+    , evKwh          : Float
     , daysInMonth    : Float
     }
 
@@ -1089,6 +1112,14 @@ monthlyBreakdown m r u pv =
         -- the tighter target to reflect occupants wanting consistent
         -- year-round indoor temperature.
         coolTarget = String.toFloat m.tempIn |> Maybe.withDefault coolingSetpoint
+
+        -- Daily household + EV electricity (kWh/day). Household assumed
+        -- evenly spread across the year; EV miles assumed evenly spread
+        -- but with seasonally-varying Wh/mile.
+        annualHousehold = String.toFloat m.householdElecKwh |> Maybe.withDefault 0
+        householdDaily  = annualHousehold / 365
+        annualEvMiles   = String.toFloat m.evMilesPerYear |> Maybe.withDefault 0
+        milesPerDay     = annualEvMiles / 365
     in
     List.map5
         (\name ( hddF, pvF ) dl days avgT ->
@@ -1134,6 +1165,8 @@ monthlyBreakdown m r u pv =
 
                 coolingDaily = coolingDayDemand + coolingNightDemand
                 coolingElec  = coolingDaily / coolingScop
+
+                evDaily = milesPerDay * evWhPerMile avgT / 1000
             in
             { month          = name
             , pvKwh          = pv.annualKwh * pvF / days
@@ -1144,6 +1177,8 @@ monthlyBreakdown m r u pv =
             , usefulGainKwh  = useful / days
             , coolingKwh     = coolingDaily
             , coolingElecKwh = coolingElec
+            , householdKwh   = householdDaily
+            , evKwh          = evDaily
             , daysInMonth    = days
             }
         )
@@ -1203,7 +1238,7 @@ monthlyChartSection model maybeR =
                 rows = monthlyBreakdown model r u pv
                 maxVal =
                     rows
-                        |> List.map (\m -> Basics.max m.pvKwh (m.demandDayKwh + m.demandNightKwh + m.coolingElecKwh))
+                        |> List.map (\m -> Basics.max m.pvKwh (m.demandDayKwh + m.demandNightKwh + m.coolingElecKwh + m.householdKwh + m.evKwh))
                         |> List.maximum
                         |> Maybe.withDefault 1
             in
@@ -1442,6 +1477,8 @@ chartLegend =
         , legendSwatch "#c77700" "HP demand — day"
         , legendSwatch "#6a4b8a" "HP demand — night"
         , legendSwatch "#3b82c4" "HP demand — cooling"
+        , legendSwatch "#888888" "Household"
+        , legendSwatch "#444466" "EV"
         ]
 
 
@@ -1474,11 +1511,13 @@ monthlyChart rows maxVal =
 
         column row =
             let
-                pvH      = row.pvKwh * chartH / maxVal
-                dayH     = row.demandDayKwh * chartH / maxVal
-                nightH   = row.demandNightKwh * chartH / maxVal
-                coolH    = row.coolingElecKwh * chartH / maxVal
-                demandH  = dayH + nightH + coolH
+                pvH       = row.pvKwh * chartH / maxVal
+                dayH      = row.demandDayKwh * chartH / maxVal
+                nightH    = row.demandNightKwh * chartH / maxVal
+                coolH     = row.coolingElecKwh * chartH / maxVal
+                householdH = row.householdKwh * chartH / maxVal
+                evH       = row.evKwh * chartH / maxVal
+                demandH   = dayH + nightH + coolH + householdH + evH
             in
             div [ style "display" "flex", style "flex-direction" "column", style "align-items" "center", style "gap" "0.4rem", style "flex" "1" ]
                 [ div
@@ -1497,6 +1536,8 @@ monthlyChart rows maxVal =
                         [ bar "#c77700" dayH
                         , bar "#6a4b8a" nightH
                         , bar "#3b82c4" coolH
+                        , bar "#888888" householdH
+                        , bar "#444466" evH
                         ]
                     ]
                 , div [ style "font-size" "0.72rem", style "color" "#666" ] [ text row.month ]
@@ -1563,6 +1604,10 @@ inputsPanel m =
         , ufhSection m
         , inputSection "Annual Energy"
             [ inputRow "Heating degree days" "°C·d" m.hdd SetHDD "0" "50"
+            ]
+        , inputSection "Other Electricity"
+            [ inputRow "Household baseload" "kWh/yr" m.householdElecKwh SetHouseholdElecKwh "0" "100"
+            , inputRow "EV mileage" "mi/yr" m.evMilesPerYear SetEvMilesPerYear "0" "500"
             ]
         , pvSection m
         ]
@@ -1858,8 +1903,12 @@ resultsPanel model maybeR =
                                 rows |> List.map (\row -> row.coolingKwh * row.daysInMonth) |> List.sum
                             annualCoolElec =
                                 rows |> List.map (\row -> row.coolingElecKwh * row.daysInMonth) |> List.sum
+                            annualEvKwh =
+                                rows |> List.map (\row -> row.evKwh * row.daysInMonth) |> List.sum
+                            annualHouseholdKwh =
+                                rows |> List.map (\row -> row.householdKwh * row.daysInMonth) |> List.sum
                         in
-                        runningCard u annualCoolKwh annualCoolElec
+                        runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh
 
                     Nothing ->
                         text ""
@@ -1967,8 +2016,11 @@ ufhCard model u =
         ]
 
 
-runningCard : UFHResults -> Float -> Float -> Html Msg
-runningCard u annualCoolKwh annualCoolElec =
+runningCard : UFHResults -> Float -> Float -> Float -> Float -> Html Msg
+runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh =
+    let
+        totalElec = u.annualElecKwh + annualCoolElec + annualHouseholdKwh + annualEvKwh
+    in
     card "#f5f7ff" "Annual Energy"
         [ detailRow "Gross heat demand"   (String.fromInt (round u.annualHeatKwh))     "kWh/yr"
         , detailRow "Solar gain (incident)" (String.fromInt (round u.annualSolarGain)) "kWh/yr"
@@ -1980,7 +2032,9 @@ runningCard u annualCoolKwh annualCoolElec =
         , detailRow "Electricity (heating)"  (String.fromInt (round u.annualElecKwh))   "kWh/yr"
         , detailRow ("Electricity (cooling, SCOP " ++ fmt1 coolingScop ++ ")")
                     (String.fromInt (round annualCoolElec)) "kWh/yr"
-        , detailRow "Electricity (total)" (String.fromInt (round (u.annualElecKwh + annualCoolElec))) "kWh/yr"
+        , detailRow "Electricity (household)" (String.fromInt (round annualHouseholdKwh)) "kWh/yr"
+        , detailRow "Electricity (EV)"        (String.fromInt (round annualEvKwh))        "kWh/yr"
+        , detailRow "Electricity (total)"     (String.fromInt (round totalElec))          "kWh/yr"
         ]
 
 
