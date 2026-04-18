@@ -7,6 +7,7 @@ import Main exposing
     , Orientation(..)
     , RoofType(..)
     , ShelterFactor(..)
+    , ThermalMass(..)
     , VentMode(..)
     , decodeParams
     , defaultModel
@@ -121,6 +122,12 @@ suite =
                         , pvKwp = "5"
                         , pvIrradiation = "1050"
                         , pvOrientation = EastWest
+
+                        -- These fields were not present in the original v1
+                        -- payload. The decoder backfills from defaults,
+                        -- confirming forward-compat still holds for this URL.
+                        , gValue = "0.6"
+                        , thermalMass = MediumMass
                         }
                 in
                 decodeParams pinned

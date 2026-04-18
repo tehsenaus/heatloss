@@ -5198,12 +5198,13 @@ var $elm$core$Task$perform = F2(
 var $elm$browser$Browser$element = _Browser_element;
 var $elm$json$Json$Decode$float = _Json_decodeFloat;
 var $author$project$Main$FromN50 = {$: 'FromN50'};
+var $author$project$Main$MediumMass = {$: 'MediumMass'};
 var $author$project$Main$SAP2012 = {$: 'SAP2012'};
 var $author$project$Main$Slight = {$: 'Slight'};
 var $author$project$Main$South = {$: 'South'};
 var $author$project$Main$Tile = {$: 'Tile'};
 var $author$project$Main$VaultedRoof = {$: 'VaultedRoof'};
-var $author$project$Main$defaultModel = {ach: '0.5', emitterDeltaT: '5', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, tempIn: '21', tempOut: '-3', totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
+var $author$project$Main$defaultModel = {ach: '0.5', emitterDeltaT: '5', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', gValue: '0.6', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, tempIn: '21', tempOut: '-3', thermalMass: $author$project$Main$MediumMass, totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
 var $author$project$Main$Carpet = {$: 'Carpet'};
 var $author$project$Main$Wood = {$: 'Wood'};
 var $elm$core$Basics$round = _Basics_round;
@@ -5410,6 +5411,29 @@ var $author$project$Main$shelterFactorToF = function (s) {
 			return 3;
 	}
 };
+var $author$project$Main$HeavyMass = {$: 'HeavyMass'};
+var $author$project$Main$LightMass = {$: 'LightMass'};
+var $author$project$Main$thermalMassFromF = function (f) {
+	var _v0 = $elm$core$Basics$round(f);
+	switch (_v0) {
+		case 0:
+			return $author$project$Main$LightMass;
+		case 1:
+			return $author$project$Main$MediumMass;
+		default:
+			return $author$project$Main$HeavyMass;
+	}
+};
+var $author$project$Main$thermalMassToF = function (t) {
+	switch (t.$) {
+		case 'LightMass':
+			return 0;
+		case 'MediumMass':
+			return 1;
+		default:
+			return 2;
+	}
+};
 var $author$project$Main$DirectACH = {$: 'DirectACH'};
 var $author$project$Main$ventModeFromF = function (f) {
 	return (f < 0.5) ? $author$project$Main$DirectACH : $author$project$Main$FromN50;
@@ -5461,6 +5485,7 @@ var $author$project$Main$decodeParams = function (floats) {
 		floorHeight: A2(getS, 2, d.floorHeight),
 		floorU: A2(getS, 7, d.floorU),
 		flowTemp: A2(getS, 20, d.flowTemp),
+		gValue: A2(getS, 26, d.gValue),
 		glazingPct: A2(getS, 8, d.glazingPct),
 		glazingU: A2(getS, 9, d.glazingU),
 		hdd: A2(getS, 22, d.hdd),
@@ -5493,6 +5518,11 @@ var $author$project$Main$decodeParams = function (floats) {
 				$author$project$Main$shelterFactorToF(d.shelterFactor))),
 		tempIn: A2(getS, 16, d.tempIn),
 		tempOut: A2(getS, 17, d.tempOut),
+		thermalMass: $author$project$Main$thermalMassFromF(
+			A2(
+				getF,
+				27,
+				$author$project$Main$thermalMassToF(d.thermalMass))),
 		totalFloorArea: A2(getS, 0, d.totalFloorArea),
 		ventMode: $author$project$Main$ventModeFromF(
 			A2(
@@ -5559,7 +5589,9 @@ var $author$project$Main$encodeParams = function (m) {
 			$author$project$Main$toF(m.hdd),
 			$author$project$Main$toF(m.pvKwp),
 			$author$project$Main$toF(m.pvIrradiation),
-			$author$project$Main$orientationToF(m.pvOrientation)
+			$author$project$Main$orientationToF(m.pvOrientation),
+			$author$project$Main$toF(m.gValue),
+			$author$project$Main$thermalMassToF(m.thermalMass)
 		]);
 };
 var $elm$json$Json$Encode$float = _Json_wrap;
@@ -5703,11 +5735,21 @@ var $author$project$Main$updateField = F2(
 				return _Utils_update(
 					model,
 					{pvIrradiation: v});
-			default:
+			case 'SetPvOrientation':
 				var o = msg.a;
 				return _Utils_update(
 					model,
 					{pvOrientation: o});
+			case 'SetGValue':
+				var v = msg.a;
+				return _Utils_update(
+					model,
+					{gValue: v});
+			default:
+				var t = msg.a;
+				return _Utils_update(
+					model,
+					{thermalMass: t});
 		}
 	});
 var $author$project$Main$update = F2(
@@ -5905,6 +5947,9 @@ var $author$project$Main$SetFloorHeight = function (a) {
 };
 var $author$project$Main$SetFloorU = function (a) {
 	return {$: 'SetFloorU', a: a};
+};
+var $author$project$Main$SetGValue = function (a) {
+	return {$: 'SetGValue', a: a};
 };
 var $author$project$Main$SetGlazingPct = function (a) {
 	return {$: 'SetGlazingPct', a: a};
@@ -6316,6 +6361,57 @@ var $author$project$Main$roofSection = function (m) {
 			}()
 			]));
 };
+var $author$project$Main$SetThermalMass = function (a) {
+	return {$: 'SetThermalMass', a: a};
+};
+var $author$project$Main$thermalMassLabel = function (t) {
+	switch (t.$) {
+		case 'LightMass':
+			return 'Light (timber frame)';
+		case 'MediumMass':
+			return 'Medium (cavity masonry)';
+		default:
+			return 'Heavy (solid masonry / concrete)';
+	}
+};
+var $author$project$Main$thermalMassSection = function (m) {
+	return A2(
+		$elm$html$Html$div,
+		_List_fromArray(
+			[
+				A2($elm$html$Html$Attributes$style, 'margin-bottom', '1.5rem')
+			]),
+		_List_fromArray(
+			[
+				$author$project$Main$sectionLabel('Thermal Mass'),
+				A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+						A2($elm$html$Html$Attributes$style, 'flex-direction', 'column'),
+						A2($elm$html$Html$Attributes$style, 'gap', '0.2rem')
+					]),
+				_List_fromArray(
+					[
+						A3(
+						$author$project$Main$radioRow,
+						$author$project$Main$thermalMassLabel($author$project$Main$LightMass),
+						_Utils_eq(m.thermalMass, $author$project$Main$LightMass),
+						$author$project$Main$SetThermalMass($author$project$Main$LightMass)),
+						A3(
+						$author$project$Main$radioRow,
+						$author$project$Main$thermalMassLabel($author$project$Main$MediumMass),
+						_Utils_eq(m.thermalMass, $author$project$Main$MediumMass),
+						$author$project$Main$SetThermalMass($author$project$Main$MediumMass)),
+						A3(
+						$author$project$Main$radioRow,
+						$author$project$Main$thermalMassLabel($author$project$Main$HeavyMass),
+						_Utils_eq(m.thermalMass, $author$project$Main$HeavyMass),
+						$author$project$Main$SetThermalMass($author$project$Main$HeavyMass))
+					]))
+			]));
+};
 var $author$project$Main$SetEmitterDeltaT = function (a) {
 	return {$: 'SetEmitterDeltaT', a: a};
 };
@@ -6660,8 +6756,10 @@ var $author$project$Main$inputsPanel = function (m) {
 				_List_fromArray(
 					[
 						A6($author$project$Main$inputRow, '% of total wall area', '%', m.glazingPct, $author$project$Main$SetGlazingPct, '0', '1'),
-						A6($author$project$Main$inputRow, 'Average U-value', 'W/m²K', m.glazingU, $author$project$Main$SetGlazingU, '0', '0.1')
+						A6($author$project$Main$inputRow, 'Average U-value', 'W/m²K', m.glazingU, $author$project$Main$SetGlazingU, '0', '0.1'),
+						A6($author$project$Main$inputRow, 'g-value (solar)', '', m.gValue, $author$project$Main$SetGValue, '0', '0.05')
 					])),
+				$author$project$Main$thermalMassSection(m),
 				$author$project$Main$yFactorSection(m),
 				$author$project$Main$ventilationSection(m),
 				A2(
@@ -6737,39 +6835,39 @@ var $author$project$Main$tiltOrientFactor = F2(
 							_Utils_Tuple2(0, 1.00),
 							_Utils_Tuple2(20, 1.12),
 							_Utils_Tuple2(35, 1.16),
-							_Utils_Tuple2(50, 1.13),
-							_Utils_Tuple2(70, 1.05),
-							_Utils_Tuple2(90, 0.85)
+							_Utils_Tuple2(50, 1.10),
+							_Utils_Tuple2(70, 0.95),
+							_Utils_Tuple2(90, 0.70)
 						]);
 				case 'SouthEastWest':
 					return _List_fromArray(
 						[
 							_Utils_Tuple2(0, 1.00),
-							_Utils_Tuple2(20, 1.05),
-							_Utils_Tuple2(35, 1.07),
-							_Utils_Tuple2(50, 1.02),
-							_Utils_Tuple2(70, 0.92),
-							_Utils_Tuple2(90, 0.73)
+							_Utils_Tuple2(20, 1.04),
+							_Utils_Tuple2(35, 1.05),
+							_Utils_Tuple2(50, 0.98),
+							_Utils_Tuple2(70, 0.82),
+							_Utils_Tuple2(90, 0.60)
 						]);
 				case 'EastWest':
 					return _List_fromArray(
 						[
 							_Utils_Tuple2(0, 1.00),
-							_Utils_Tuple2(20, 0.96),
-							_Utils_Tuple2(35, 0.90),
-							_Utils_Tuple2(50, 0.82),
-							_Utils_Tuple2(70, 0.72),
-							_Utils_Tuple2(90, 0.58)
+							_Utils_Tuple2(20, 0.95),
+							_Utils_Tuple2(35, 0.88),
+							_Utils_Tuple2(50, 0.78),
+							_Utils_Tuple2(70, 0.65),
+							_Utils_Tuple2(90, 0.50)
 						]);
 				default:
 					return _List_fromArray(
 						[
 							_Utils_Tuple2(0, 1.00),
-							_Utils_Tuple2(20, 0.82),
-							_Utils_Tuple2(35, 0.68),
-							_Utils_Tuple2(50, 0.58),
-							_Utils_Tuple2(70, 0.48),
-							_Utils_Tuple2(90, 0.40)
+							_Utils_Tuple2(20, 0.78),
+							_Utils_Tuple2(35, 0.62),
+							_Utils_Tuple2(50, 0.50),
+							_Utils_Tuple2(70, 0.38),
+							_Utils_Tuple2(90, 0.27)
 						]);
 			}
 		}();
@@ -6814,6 +6912,36 @@ var $author$project$Main$floorCoeff = function (c) {
 	}
 };
 var $author$project$Main$floorSurfaceH = 10.8;
+var $author$project$Main$glazingVertFactor = 0.7 * (((0.35 * A2($author$project$Main$tiltOrientFactor, $author$project$Main$North, 90)) + (0.35 * A2($author$project$Main$tiltOrientFactor, $author$project$Main$South, 90))) + (0.30 * A2($author$project$Main$tiltOrientFactor, $author$project$Main$EastWest, 90)));
+var $author$project$Main$hddFractions = _List_fromArray(
+	[0.16, 0.14, 0.12, 0.08, 0.05, 0.02, 0.01, 0.01, 0.04, 0.09, 0.12, 0.16]);
+var $author$project$Main$pvFractions = _List_fromArray(
+	[0.03, 0.05, 0.08, 0.12, 0.13, 0.14, 0.14, 0.12, 0.09, 0.06, 0.03, 0.01]);
+var $elm$core$List$sum = function (numbers) {
+	return A3($elm$core$List$foldl, $elm$core$Basics$add, 0, numbers);
+};
+var $author$project$Main$thermalMassTau = function (t) {
+	switch (t.$) {
+		case 'LightMass':
+			return 50;
+		case 'MediumMass':
+			return 110;
+		default:
+			return 240;
+	}
+};
+var $elm$core$Basics$negate = function (n) {
+	return -n;
+};
+var $elm$core$Basics$abs = function (n) {
+	return (n < 0) ? (-n) : n;
+};
+var $elm$core$Basics$pow = _Basics_pow;
+var $author$project$Main$utilisationFactor = F2(
+	function (gamma, tau) {
+		var a = 1 + (tau / 15);
+		return (gamma < 0) ? 1 : (($elm$core$Basics$abs(gamma - 1) < 1.0e-6) ? (a / (a + 1)) : ((1 - A2($elm$core$Basics$pow, gamma, a)) / (1 - A2($elm$core$Basics$pow, gamma, a + 1))));
+	});
 var $author$project$Main$calculateUFH = F2(
 	function (m, r) {
 		return A2(
@@ -6832,24 +6960,49 @@ var $author$project$Main$calculateUFH = F2(
 											$elm$core$Maybe$andThen,
 											function (ti) {
 												return A2(
-													$elm$core$Maybe$map,
+													$elm$core$Maybe$andThen,
 													function (to_) {
-														var specHeatLoss = (r.deltaT > 0) ? (r.qTotal / r.deltaT) : 0;
-														var scop = A2($author$project$Main$estimateCop, ft, 7);
-														var requiredSpecific = (hfa > 0) ? (r.qTotal / hfa) : 0;
-														var meanWater = ft - (edt / 2);
-														var k = $author$project$Main$floorCoeff(m.floorCovering);
-														var requiredMeanWater = ti + ((k > 0) ? (requiredSpecific / k) : 0);
-														var requiredFlowTemp = requiredMeanWater + (edt / 2);
-														var designCop = A2($author$project$Main$estimateCop, ft, to_);
-														var dTemp = A2($elm$core$Basics$max, 0, meanWater - ti);
-														var specificOutput = k * dTemp;
-														var maxOutput = specificOutput * hfa;
-														var surfaceTemp = ti + (specificOutput / $author$project$Main$floorSurfaceH);
-														var coverage = (r.qTotal > 0) ? ((maxOutput / r.qTotal) * 100) : 0;
-														var annualHeatKwh = ((specHeatLoss * hdd_) * 24) / 1000;
-														var annualElecKwh = (scop > 0) ? (annualHeatKwh / scop) : 0;
-														return {annualElecKwh: annualElecKwh, annualHeatKwh: annualHeatKwh, coverage: coverage, designCop: designCop, maxOutput: maxOutput, meanWaterTemp: meanWater, requiredFlowTemp: requiredFlowTemp, scop: scop, specificOutput: specificOutput, surfaceTemp: surfaceTemp};
+														return A2(
+															$elm$core$Maybe$andThen,
+															function (gVal) {
+																return A2(
+																	$elm$core$Maybe$map,
+																	function (horizIrr) {
+																		var tau = $author$project$Main$thermalMassTau(m.thermalMass);
+																		var specHeatLoss = (r.deltaT > 0) ? (r.qTotal / r.deltaT) : 0;
+																		var scop = A2($author$project$Main$estimateCop, ft, 7);
+																		var requiredSpecific = (hfa > 0) ? (r.qTotal / hfa) : 0;
+																		var meanWater = ft - (edt / 2);
+																		var k = $author$project$Main$floorCoeff(m.floorCovering);
+																		var requiredMeanWater = ti + ((k > 0) ? (requiredSpecific / k) : 0);
+																		var requiredFlowTemp = requiredMeanWater + (edt / 2);
+																		var designCop = A2($author$project$Main$estimateCop, ft, to_);
+																		var dTemp = A2($elm$core$Basics$max, 0, meanWater - ti);
+																		var specificOutput = k * dTemp;
+																		var maxOutput = specificOutput * hfa;
+																		var surfaceTemp = ti + (specificOutput / $author$project$Main$floorSurfaceH);
+																		var coverage = (r.qTotal > 0) ? ((maxOutput / r.qTotal) * 100) : 0;
+																		var annualSolarGain = ((r.glazingArea * gVal) * horizIrr) * $author$project$Main$glazingVertFactor;
+																		var annualHeatKwh = ((specHeatLoss * hdd_) * 24) / 1000;
+																		var monthlyUseful = A3(
+																			$elm$core$List$map2,
+																			F2(
+																				function (hf, pf) {
+																					var grossHeat = annualHeatKwh * hf;
+																					var gain = annualSolarGain * pf;
+																					return (grossHeat < 0.001) ? 0 : (A2($author$project$Main$utilisationFactor, gain / grossHeat, tau) * gain);
+																				}),
+																			$author$project$Main$hddFractions,
+																			$author$project$Main$pvFractions);
+																		var annualUsefulGain = $elm$core$List$sum(monthlyUseful);
+																		var annualNetHeatKwh = A2($elm$core$Basics$max, 0, annualHeatKwh - annualUsefulGain);
+																		var annualExcessGain = A2($elm$core$Basics$max, 0, annualSolarGain - annualUsefulGain);
+																		var annualElecKwh = (scop > 0) ? (annualNetHeatKwh / scop) : 0;
+																		return {annualElecKwh: annualElecKwh, annualExcessGain: annualExcessGain, annualHeatKwh: annualHeatKwh, annualNetHeatKwh: annualNetHeatKwh, annualSolarGain: annualSolarGain, annualUsefulGain: annualUsefulGain, coverage: coverage, designCop: designCop, maxOutput: maxOutput, meanWaterTemp: meanWater, requiredFlowTemp: requiredFlowTemp, scop: scop, specificOutput: specificOutput, surfaceTemp: surfaceTemp};
+																	},
+																	$elm$core$String$toFloat(m.pvIrradiation));
+															},
+															$elm$core$String$toFloat(m.gValue));
 													},
 													$elm$core$String$toFloat(m.tempOut));
 											},
@@ -6905,6 +7058,152 @@ var $author$project$Main$chartLegend = A2(
 			A2($author$project$Main$legendSwatch, '#c77700', 'HP demand — day'),
 			A2($author$project$Main$legendSwatch, '#6a4b8a', 'HP demand — night')
 		]));
+var $author$project$Main$heatChart = F2(
+	function (rows, maxVal) {
+		var chartH = 160.0;
+		var yLabel = function (v) {
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+						A2($elm$html$Html$Attributes$style, 'right', '0.5rem'),
+						A2(
+						$elm$html$Html$Attributes$style,
+						'top',
+						$elm$core$String$fromFloat(chartH * (1 - (v / maxVal))) + 'px'),
+						A2($elm$html$Html$Attributes$style, 'font-size', '0.7rem'),
+						A2($elm$html$Html$Attributes$style, 'color', '#888'),
+						A2($elm$html$Html$Attributes$style, 'transform', 'translateY(-50%)'),
+						A2($elm$html$Html$Attributes$style, 'white-space', 'nowrap'),
+						A2($elm$html$Html$Attributes$style, 'text-align', 'right')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text(
+						$elm$core$String$fromInt(
+							$elm$core$Basics$round(v)) + ' kWh/day')
+					]));
+		};
+		var bar = F2(
+			function (colour, h) {
+				return A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'width', '14px'),
+							A2(
+							$elm$html$Html$Attributes$style,
+							'height',
+							$elm$core$String$fromFloat(h) + 'px'),
+							A2($elm$html$Html$Attributes$style, 'background', colour)
+						]),
+					_List_Nil);
+			});
+		var column = function (row) {
+			var wastedH = ((row.solarGainKwh - row.usefulGainKwh) * chartH) / maxVal;
+			var usefulH = (row.usefulGainKwh * chartH) / maxVal;
+			var heatH = (row.grossHeatKwh * chartH) / maxVal;
+			var gainH = (row.solarGainKwh * chartH) / maxVal;
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+						A2($elm$html$Html$Attributes$style, 'flex-direction', 'column'),
+						A2($elm$html$Html$Attributes$style, 'align-items', 'center'),
+						A2($elm$html$Html$Attributes$style, 'gap', '0.4rem'),
+						A2($elm$html$Html$Attributes$style, 'flex', '1')
+					]),
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+								A2($elm$html$Html$Attributes$style, 'align-items', 'flex-end'),
+								A2($elm$html$Html$Attributes$style, 'gap', '3px'),
+								A2(
+								$elm$html$Html$Attributes$style,
+								'height',
+								$elm$core$String$fromFloat(chartH) + 'px')
+							]),
+						_List_fromArray(
+							[
+								A2(bar, '#c77700', heatH),
+								A2(
+								$elm$html$Html$div,
+								_List_fromArray(
+									[
+										A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+										A2($elm$html$Html$Attributes$style, 'flex-direction', 'column-reverse'),
+										A2(
+										$elm$html$Html$Attributes$style,
+										'height',
+										$elm$core$String$fromFloat(gainH) + 'px'),
+										A2($elm$html$Html$Attributes$style, 'width', '14px')
+									]),
+								_List_fromArray(
+									[
+										A2(bar, '#c49b00', usefulH),
+										A2(bar, '#f0d970', wastedH)
+									]))
+							])),
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'font-size', '0.72rem'),
+								A2($elm$html$Html$Attributes$style, 'color', '#666')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text(row.month)
+							]))
+					]));
+		};
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+					A2($elm$html$Html$Attributes$style, 'gap', '0.25rem'),
+					A2($elm$html$Html$Attributes$style, 'padding-left', '3.5rem'),
+					A2($elm$html$Html$Attributes$style, 'position', 'relative')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+							A2($elm$html$Html$Attributes$style, 'left', '0'),
+							A2($elm$html$Html$Attributes$style, 'top', '0'),
+							A2($elm$html$Html$Attributes$style, 'width', '3.5rem'),
+							A2(
+							$elm$html$Html$Attributes$style,
+							'height',
+							$elm$core$String$fromFloat(chartH) + 'px')
+						]),
+					_List_fromArray(
+						[
+							yLabel(maxVal),
+							yLabel(maxVal / 2),
+							yLabel(0)
+						])),
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+							A2($elm$html$Html$Attributes$style, 'flex', '1'),
+							A2($elm$html$Html$Attributes$style, 'gap', '0.25rem')
+						]),
+					A2($elm$core$List$map, column, rows))
+				]));
+	});
 var $elm$core$List$maximum = function (list) {
 	if (list.b) {
 		var x = list.a;
@@ -6915,31 +7214,86 @@ var $elm$core$List$maximum = function (list) {
 		return $elm$core$Maybe$Nothing;
 	}
 };
+var $author$project$Main$heatChartSection = function (rows) {
+	var maxHeat = A2(
+		$elm$core$Maybe$withDefault,
+		1,
+		$elm$core$List$maximum(
+			A2(
+				$elm$core$List$map,
+				function (m) {
+					return A2($elm$core$Basics$max, m.grossHeatKwh, m.solarGainKwh);
+				},
+				rows)));
+	return A2(
+		$elm$html$Html$div,
+		_List_fromArray(
+			[
+				A2($elm$html$Html$Attributes$style, 'margin-top', '1.5rem')
+			]),
+		_List_fromArray(
+			[
+				A2(
+				$elm$html$Html$p,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'font-size', '0.72rem'),
+						A2($elm$html$Html$Attributes$style, 'font-weight', '600'),
+						A2($elm$html$Html$Attributes$style, 'text-transform', 'uppercase'),
+						A2($elm$html$Html$Attributes$style, 'letter-spacing', '0.08em'),
+						A2($elm$html$Html$Attributes$style, 'color', '#888'),
+						A2($elm$html$Html$Attributes$style, 'margin-bottom', '0.5rem')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Monthly — Heat Demand vs Solar Gain (through glazing)')
+					])),
+				A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+						A2($elm$html$Html$Attributes$style, 'gap', '1rem'),
+						A2($elm$html$Html$Attributes$style, 'flex-wrap', 'wrap'),
+						A2($elm$html$Html$Attributes$style, 'font-size', '0.78rem'),
+						A2($elm$html$Html$Attributes$style, 'color', '#555'),
+						A2($elm$html$Html$Attributes$style, 'margin-bottom', '0.75rem')
+					]),
+				_List_fromArray(
+					[
+						A2($author$project$Main$legendSwatch, '#c77700', 'Gross heat demand'),
+						A2($author$project$Main$legendSwatch, '#e6b800', 'Solar gain (dark = useful)')
+					])),
+				A2($author$project$Main$heatChart, rows, maxHeat)
+			]));
+};
 var $author$project$Main$daylightHours = _List_fromArray(
 	[8.0, 10.0, 12.0, 14.0, 15.5, 16.5, 16.0, 14.5, 12.5, 11.0, 9.0, 7.5]);
-var $author$project$Main$hddFractions = _List_fromArray(
-	[0.16, 0.14, 0.12, 0.08, 0.05, 0.02, 0.01, 0.01, 0.04, 0.09, 0.12, 0.16]);
-var $elm$core$List$map4 = _List_map4;
+var $author$project$Main$daysInMonth = _List_fromArray(
+	[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]);
+var $elm$core$List$map5 = _List_map5;
 var $author$project$Main$monthNames = _List_fromArray(
 	['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']);
-var $author$project$Main$pvFractions = _List_fromArray(
-	[0.03, 0.05, 0.08, 0.12, 0.13, 0.14, 0.14, 0.12, 0.09, 0.06, 0.03, 0.01]);
-var $author$project$Main$monthlyBreakdown = F2(
-	function (u, pv) {
-		return A5(
-			$elm$core$List$map4,
-			F4(
-				function (name, hddF, pvF, dl) {
-					var demand = u.annualElecKwh * hddF;
+var $author$project$Main$monthlyBreakdown = F3(
+	function (m, u, pv) {
+		var tau = $author$project$Main$thermalMassTau(m.thermalMass);
+		return A6(
+			$elm$core$List$map5,
+			F5(
+				function (name, hddF, pvF, dl, days) {
+					var grossHeat = u.annualHeatKwh * hddF;
+					var gain = u.annualSolarGain * pvF;
+					var useful = (grossHeat < 0.001) ? 0 : (A2($author$project$Main$utilisationFactor, gain / grossHeat, tau) * gain);
+					var netHeat = A2($elm$core$Basics$max, 0, grossHeat - useful);
+					var netElec = (u.scop > 0) ? (netHeat / u.scop) : 0;
 					var dayFrac = dl / 24;
-					var demandDay = demand * dayFrac;
-					var demandNite = demand * (1 - dayFrac);
-					return {demandDayKwh: demandDay, demandNightKwh: demandNite, month: name, pvKwh: pv.annualKwh * pvF};
+					return {demandDayKwh: (netElec * dayFrac) / days, demandNightKwh: (netElec * (1 - dayFrac)) / days, grossHeatKwh: grossHeat / days, month: name, pvKwh: (pv.annualKwh * pvF) / days, solarGainKwh: gain / days, usefulGainKwh: useful / days};
 				}),
 			$author$project$Main$monthNames,
 			$author$project$Main$hddFractions,
 			$author$project$Main$pvFractions,
-			$author$project$Main$daylightHours);
+			$author$project$Main$daylightHours,
+			$author$project$Main$daysInMonth);
 	});
 var $author$project$Main$monthlyChart = F2(
 	function (rows, maxVal) {
@@ -6965,7 +7319,7 @@ var $author$project$Main$monthlyChart = F2(
 					[
 						$elm$html$Html$text(
 						$elm$core$String$fromInt(
-							$elm$core$Basics$round(v)) + ' kWh')
+							$elm$core$Basics$round(v)) + ' kWh/day')
 					]));
 		};
 		var bar = F2(
@@ -7111,7 +7465,7 @@ var $author$project$Main$monthlyChartSection = F2(
 			var _v1 = _v0.a;
 			var u = _v1.a;
 			var pv = _v1.b;
-			var rows = A2($author$project$Main$monthlyBreakdown, u, pv);
+			var rows = A3($author$project$Main$monthlyBreakdown, model, u, pv);
 			var maxVal = A2(
 				$elm$core$Maybe$withDefault,
 				1,
@@ -7149,7 +7503,8 @@ var $author$project$Main$monthlyChartSection = F2(
 								$elm$html$Html$text('Monthly — Heat Pump Electricity vs Solar PV')
 							])),
 						$author$project$Main$chartLegend,
-						A2($author$project$Main$monthlyChart, rows, maxVal)
+						A2($author$project$Main$monthlyChart, rows, maxVal),
+						$author$project$Main$heatChartSection(rows)
 					]));
 		}
 	});
@@ -7563,10 +7918,43 @@ var $author$project$Main$runningCard = function (u) {
 			[
 				A3(
 				$author$project$Main$detailRow,
-				'Heat demand',
+				'Gross heat demand',
 				$elm$core$String$fromInt(
 					$elm$core$Basics$round(u.annualHeatKwh)),
 				'kWh/yr'),
+				A3(
+				$author$project$Main$detailRow,
+				'Solar gain (incident)',
+				$elm$core$String$fromInt(
+					$elm$core$Basics$round(u.annualSolarGain)),
+				'kWh/yr'),
+				A3(
+				$author$project$Main$detailRow,
+				'  → useful (heating)',
+				'−' + $elm$core$String$fromInt(
+					$elm$core$Basics$round(u.annualUsefulGain)),
+				'kWh/yr'),
+				A3(
+				$author$project$Main$detailRow,
+				'  → excess (cooling load)',
+				$elm$core$String$fromInt(
+					$elm$core$Basics$round(u.annualExcessGain)),
+				'kWh/yr'),
+				A3(
+				$author$project$Main$detailRow,
+				'Net heat demand',
+				$elm$core$String$fromInt(
+					$elm$core$Basics$round(u.annualNetHeatKwh)),
+				'kWh/yr'),
+				A2(
+				$elm$html$Html$hr,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'border', 'none'),
+						A2($elm$html$Html$Attributes$style, 'border-top', '1px solid #dde3f0'),
+						A2($elm$html$Html$Attributes$style, 'margin', '0.4rem 0')
+					]),
+				_List_Nil),
 				A3(
 				$author$project$Main$detailRow,
 				'Electricity (HP)',

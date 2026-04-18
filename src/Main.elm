@@ -5,6 +5,7 @@ port module Main exposing
     , Orientation(..)
     , RoofType(..)
     , ShelterFactor(..)
+    , ThermalMass(..)
     , VentMode(..)
     , decodeParams
     , defaultModel
@@ -89,6 +90,46 @@ type Orientation
     | North
 
 
+type ThermalMass
+    = LightMass
+    | MediumMass
+    | HeavyMass
+
+
+-- Thermal time constant in hours (EN ISO 13790 typical values)
+thermalMassTau : ThermalMass -> Float
+thermalMassTau t =
+    case t of
+        LightMass  -> 50
+        MediumMass -> 110
+        HeavyMass  -> 240
+
+
+thermalMassLabel : ThermalMass -> String
+thermalMassLabel t =
+    case t of
+        LightMass  -> "Light (timber frame)"
+        MediumMass -> "Medium (cavity masonry)"
+        HeavyMass  -> "Heavy (solid masonry / concrete)"
+
+
+-- ISO 13790 utilisation factor for solar/internal gains.
+-- gamma = gain/loss ratio for the period; tau = thermal time constant (h).
+utilisationFactor : Float -> Float -> Float
+utilisationFactor gamma tau =
+    let
+        a = 1 + tau / 15
+    in
+    if gamma < 0 then
+        1
+
+    else if abs (gamma - 1) < 1.0e-6 then
+        a / (a + 1)
+
+    else
+        (1 - gamma ^ a) / (1 - gamma ^ (a + 1))
+
+
 orientationLabel : Orientation -> String
 orientationLabel o =
     case o of
@@ -104,10 +145,12 @@ tiltOrientFactor orient pitch =
     let
         points =
             case orient of
-                South         -> [ (0, 1.00), (20, 1.12), (35, 1.16), (50, 1.13), (70, 1.05), (90, 0.85) ]
-                SouthEastWest -> [ (0, 1.00), (20, 1.05), (35, 1.07), (50, 1.02), (70, 0.92), (90, 0.73) ]
-                EastWest      -> [ (0, 1.00), (20, 0.96), (35, 0.90), (50, 0.82), (70, 0.72), (90, 0.58) ]
-                North         -> [ (0, 1.00), (20, 0.82), (35, 0.68), (50, 0.58), (70, 0.48), (90, 0.40) ]
+                -- Tilt/orientation factors vs horizontal annual irradiation
+                -- (UK ~52°N, calibrated against PVGIS)
+                South         -> [ (0, 1.00), (20, 1.12), (35, 1.16), (50, 1.10), (70, 0.95), (90, 0.70) ]
+                SouthEastWest -> [ (0, 1.00), (20, 1.04), (35, 1.05), (50, 0.98), (70, 0.82), (90, 0.60) ]
+                EastWest      -> [ (0, 1.00), (20, 0.95), (35, 0.88), (50, 0.78), (70, 0.65), (90, 0.50) ]
+                North         -> [ (0, 1.00), (20, 0.78), (35, 0.62), (50, 0.50), (70, 0.38), (90, 0.27) ]
     in
     interpolate points (clamp 0 90 pitch)
 
@@ -186,6 +229,8 @@ type alias Model =
     , pvKwp : String
     , pvIrradiation : String
     , pvOrientation : Orientation
+    , gValue : String
+    , thermalMass : ThermalMass
     }
 
 
@@ -240,6 +285,8 @@ defaultModel =
     , pvKwp = "4"
     , pvIrradiation = "990"
     , pvOrientation = South
+    , gValue = "0.6"
+    , thermalMass = MediumMass
     }
 
 
@@ -349,6 +396,22 @@ orientationFromF f =
         _ -> North
 
 
+thermalMassToF : ThermalMass -> Float
+thermalMassToF t =
+    case t of
+        LightMass  -> 0
+        MediumMass -> 1
+        HeavyMass  -> 2
+
+
+thermalMassFromF : Float -> ThermalMass
+thermalMassFromF f =
+    case round f of
+        0 -> LightMass
+        1 -> MediumMass
+        _ -> HeavyMass
+
+
 encodeParams : Model -> List Float
 encodeParams m =
     [ toF m.totalFloorArea
@@ -377,6 +440,8 @@ encodeParams m =
     , toF m.pvKwp
     , toF m.pvIrradiation
     , orientationToF m.pvOrientation
+    , toF m.gValue
+    , thermalMassToF m.thermalMass
     ]
 
 
@@ -421,6 +486,8 @@ decodeParams floats =
     , pvKwp           = getS 23 d.pvKwp
     , pvIrradiation   = getS 24 d.pvIrradiation
     , pvOrientation   = orientationFromF (getF 25 (orientationToF d.pvOrientation))
+    , gValue          = getS 26 d.gValue
+    , thermalMass     = thermalMassFromF (getF 27 (thermalMassToF d.thermalMass))
     }
 
 
@@ -455,6 +522,8 @@ type Msg
     | SetPvKwp String
     | SetPvIrradiation String
     | SetPvOrientation Orientation
+    | SetGValue String
+    | SetThermalMass ThermalMass
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -495,6 +564,8 @@ updateField msg model =
         SetPvKwp v          -> { model | pvKwp = v }
         SetPvIrradiation v  -> { model | pvIrradiation = v }
         SetPvOrientation o  -> { model | pvOrientation = o }
+        SetGValue v         -> { model | gValue = v }
+        SetThermalMass t    -> { model | thermalMass = t }
 
 
 
@@ -646,9 +717,27 @@ type alias UFHResults =
     , meanWaterTemp    : Float
     , designCop        : Float
     , scop             : Float
-    , annualHeatKwh    : Float
-    , annualElecKwh    : Float
+    , annualHeatKwh    : Float     -- gross, before solar gain
+    , annualSolarGain  : Float     -- total incident through glazing
+    , annualUsefulGain : Float     -- η × gain summed over months (η from ISO 13790)
+    , annualExcessGain : Float     -- gain − useful (potential cooling load)
+    , annualNetHeatKwh : Float     -- gross − useful
+    , annualElecKwh    : Float     -- net / scop
     }
+
+
+-- Fixed glazing orientation split: 35% N, 35% S, 15% E, 15% W
+-- (EastWest in our Orientation type covers both E and W)
+-- Shading factor (0.7) accounts for self-shading from the building's own
+-- geometry (wings, eaves, reveals) plus typical surroundings (neighbours,
+-- fences, trees). PVGIS factors assume an unobstructed vertical surface.
+glazingVertFactor : Float
+glazingVertFactor =
+    0.7
+        * (0.35 * tiltOrientFactor North 90
+            + 0.35 * tiltOrientFactor South 90
+            + 0.30 * tiltOrientFactor EastWest 90
+          )
 
 
 -- Real COP ~ 0.45 × Carnot between flow and source
@@ -674,7 +763,9 @@ calculateUFH m r =
     String.toFloat m.emitterDeltaT   |> Maybe.andThen (\edt ->
     String.toFloat m.hdd             |> Maybe.andThen (\hdd_ ->
     String.toFloat m.tempIn          |> Maybe.andThen (\ti ->
-    String.toFloat m.tempOut         |> Maybe.map     (\to_ ->
+    String.toFloat m.tempOut         |> Maybe.andThen (\to_ ->
+    String.toFloat m.gValue          |> Maybe.andThen (\gVal ->
+    String.toFloat m.pvIrradiation   |> Maybe.map     (\horizIrr ->
         let
             k              = floorCoeff m.floorCovering
             meanWater      = ft - edt / 2
@@ -700,7 +791,35 @@ calculateUFH m r =
                 if r.deltaT > 0 then r.qTotal / r.deltaT else 0
 
             annualHeatKwh = specHeatLoss * hdd_ * 24 / 1000
-            annualElecKwh = if scop > 0 then annualHeatKwh / scop else 0
+
+            -- Solar gain through glazing (annual)
+            annualSolarGain =
+                r.glazingArea * gVal * horizIrr * glazingVertFactor
+
+            -- ISO 13790 utilisation factor: η × gain ≤ demand naturally,
+            -- and excess (= gain − useful) is the potential cooling load.
+            tau = thermalMassTau m.thermalMass
+
+            monthlyUseful =
+                List.map2
+                    (\hf pf ->
+                        let
+                            grossHeat = annualHeatKwh * hf
+                            gain      = annualSolarGain * pf
+                        in
+                        if grossHeat < 0.001 then
+                            0
+
+                        else
+                            utilisationFactor (gain / grossHeat) tau * gain
+                    )
+                    hddFractions
+                    pvFractions
+
+            annualUsefulGain = List.sum monthlyUseful
+            annualExcessGain = Basics.max 0 (annualSolarGain - annualUsefulGain)
+            annualNetHeatKwh = Basics.max 0 (annualHeatKwh - annualUsefulGain)
+            annualElecKwh    = if scop > 0 then annualNetHeatKwh / scop else 0
         in
         { specificOutput   = specificOutput
         , maxOutput        = maxOutput
@@ -711,9 +830,13 @@ calculateUFH m r =
         , designCop        = designCop
         , scop             = scop
         , annualHeatKwh    = annualHeatKwh
+        , annualSolarGain  = annualSolarGain
+        , annualUsefulGain = annualUsefulGain
+        , annualExcessGain = annualExcessGain
+        , annualNetHeatKwh = annualNetHeatKwh
         , annualElecKwh    = annualElecKwh
         }
-    ))))))
+    ))))))))
 
 
 
@@ -761,10 +884,13 @@ calculatePv m u =
 
 
 type alias MonthlyRow =
-    { month         : String
-    , pvKwh         : Float
-    , demandDayKwh  : Float
+    { month          : String
+    , pvKwh          : Float
+    , demandDayKwh   : Float
     , demandNightKwh : Float
+    , grossHeatKwh   : Float
+    , solarGainKwh   : Float
+    , usefulGainKwh  : Float
     }
 
 
@@ -791,26 +917,46 @@ daylightHours =
     [ 8.0, 10.0, 12.0, 14.0, 15.5, 16.5, 16.0, 14.5, 12.5, 11.0, 9.0, 7.5 ]
 
 
-monthlyBreakdown : UFHResults -> PvResults -> List MonthlyRow
-monthlyBreakdown u pv =
-    List.map4
-        (\name hddF pvF dl ->
+daysInMonth : List Float
+daysInMonth =
+    [ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 ]
+
+
+monthlyBreakdown : Model -> UFHResults -> PvResults -> List MonthlyRow
+monthlyBreakdown m u pv =
+    let
+        tau = thermalMassTau m.thermalMass
+    in
+    List.map5
+        (\name hddF pvF dl days ->
             let
-                demand     = u.annualElecKwh * hddF
-                dayFrac    = dl / 24
-                demandDay  = demand * dayFrac
-                demandNite = demand * (1 - dayFrac)
+                grossHeat = u.annualHeatKwh * hddF
+                gain      = u.annualSolarGain * pvF
+                useful    =
+                    if grossHeat < 0.001 then
+                        0
+
+                    else
+                        utilisationFactor (gain / grossHeat) tau * gain
+
+                netHeat = Basics.max 0 (grossHeat - useful)
+                netElec = if u.scop > 0 then netHeat / u.scop else 0
+                dayFrac = dl / 24
             in
             { month          = name
-            , pvKwh          = pv.annualKwh * pvF
-            , demandDayKwh   = demandDay
-            , demandNightKwh = demandNite
+            , pvKwh          = pv.annualKwh * pvF / days
+            , demandDayKwh   = netElec * dayFrac / days
+            , demandNightKwh = netElec * (1 - dayFrac) / days
+            , grossHeatKwh   = grossHeat / days
+            , solarGainKwh   = gain / days
+            , usefulGainKwh  = useful / days
             }
         )
         monthNames
         hddFractions
         pvFractions
         daylightHours
+        daysInMonth
 
 
 
@@ -859,7 +1005,7 @@ monthlyChartSection model maybeR =
 
         Just ( u, pv ) ->
             let
-                rows = monthlyBreakdown u pv
+                rows = monthlyBreakdown model u pv
                 maxVal =
                     rows
                         |> List.map (\m -> Basics.max m.pvKwh (m.demandDayKwh + m.demandNightKwh))
@@ -883,7 +1029,113 @@ monthlyChartSection model maybeR =
                     [ text "Monthly — Heat Pump Electricity vs Solar PV" ]
                 , chartLegend
                 , monthlyChart rows maxVal
+                , heatChartSection rows
                 ]
+
+
+heatChartSection : List MonthlyRow -> Html Msg
+heatChartSection rows =
+    let
+        maxHeat =
+            rows
+                |> List.map (\m -> Basics.max m.grossHeatKwh m.solarGainKwh)
+                |> List.maximum
+                |> Maybe.withDefault 1
+    in
+    div [ style "margin-top" "1.5rem" ]
+        [ p
+            [ style "font-size" "0.72rem"
+            , style "font-weight" "600"
+            , style "text-transform" "uppercase"
+            , style "letter-spacing" "0.08em"
+            , style "color" "#888"
+            , style "margin-bottom" "0.5rem"
+            ]
+            [ text "Monthly — Heat Demand vs Solar Gain (through glazing)" ]
+        , div
+            [ style "display" "flex"
+            , style "gap" "1rem"
+            , style "flex-wrap" "wrap"
+            , style "font-size" "0.78rem"
+            , style "color" "#555"
+            , style "margin-bottom" "0.75rem"
+            ]
+            [ legendSwatch "#c77700" "Gross heat demand"
+            , legendSwatch "#e6b800" "Solar gain (dark = useful)"
+            ]
+        , heatChart rows maxHeat
+        ]
+
+
+heatChart : List MonthlyRow -> Float -> Html Msg
+heatChart rows maxVal =
+    let
+        chartH = 160.0
+
+        bar colour h =
+            div
+                [ style "width" "14px"
+                , style "height" (String.fromFloat h ++ "px")
+                , style "background" colour
+                ]
+                []
+
+        column row =
+            let
+                heatH    = row.grossHeatKwh * chartH / maxVal
+                gainH    = row.solarGainKwh * chartH / maxVal
+                usefulH  = row.usefulGainKwh * chartH / maxVal
+                wastedH  = (row.solarGainKwh - row.usefulGainKwh) * chartH / maxVal
+            in
+            div [ style "display" "flex", style "flex-direction" "column", style "align-items" "center", style "gap" "0.4rem", style "flex" "1" ]
+                [ div
+                    [ style "display" "flex"
+                    , style "align-items" "flex-end"
+                    , style "gap" "3px"
+                    , style "height" (String.fromFloat chartH ++ "px")
+                    ]
+                    [ bar "#c77700" heatH
+                    , div
+                        [ style "display" "flex"
+                        , style "flex-direction" "column-reverse"
+                        , style "height" (String.fromFloat gainH ++ "px")
+                        , style "width" "14px"
+                        ]
+                        [ bar "#c49b00" usefulH
+                        , bar "#f0d970" wastedH
+                        ]
+                    ]
+                , div [ style "font-size" "0.72rem", style "color" "#666" ] [ text row.month ]
+                ]
+
+        yLabel v =
+            div
+                [ style "position" "absolute"
+                , style "right" "0.5rem"
+                , style "top" (String.fromFloat (chartH * (1 - v / maxVal)) ++ "px")
+                , style "font-size" "0.7rem"
+                , style "color" "#888"
+                , style "transform" "translateY(-50%)"
+                , style "white-space" "nowrap"
+                , style "text-align" "right"
+                ]
+                [ text (String.fromInt (round v) ++ " kWh/day") ]
+    in
+    div [ style "display" "flex", style "gap" "0.25rem", style "padding-left" "3.5rem", style "position" "relative" ]
+        [ div
+            [ style "position" "absolute"
+            , style "left" "0"
+            , style "top" "0"
+            , style "width" "3.5rem"
+            , style "height" (String.fromFloat chartH ++ "px")
+            ]
+            [ yLabel maxVal
+            , yLabel (maxVal / 2)
+            , yLabel 0
+            ]
+        , div [ style "display" "flex", style "flex" "1", style "gap" "0.25rem" ]
+            (List.map column rows)
+        ]
 
 
 chartLegend : Html Msg
@@ -969,7 +1221,7 @@ monthlyChart rows maxVal =
                 , style "white-space" "nowrap"
                 , style "text-align" "right"
                 ]
-                [ text (String.fromInt (round v) ++ " kWh") ]
+                [ text (String.fromInt (round v) ++ " kWh/day") ]
     in
     div [ style "display" "flex", style "gap" "0.25rem", style "padding-left" "3.5rem", style "position" "relative" ]
         [ div
@@ -1005,7 +1257,9 @@ inputsPanel m =
         , inputSection "Glazing"
             [ inputRow "% of total wall area" "%" m.glazingPct SetGlazingPct "0" "1"
             , inputRow "Average U-value" "W/m²K" m.glazingU SetGlazingU "0" "0.1"
+            , inputRow "g-value (solar)" "" m.gValue SetGValue "0" "0.05"
             ]
+        , thermalMassSection m
         , yFactorSection m
         , ventilationSection m
         , inputSection "Design Temperatures"
@@ -1068,6 +1322,18 @@ roofSection m =
         , case m.roofType of
             FlatRoof    -> text ""
             VaultedRoof -> inputRow "Pitch angle" "°" m.pitchAngle SetPitchAngle "1" "1"
+        ]
+
+
+thermalMassSection : Model -> Html Msg
+thermalMassSection m =
+    div [ style "margin-bottom" "1.5rem" ]
+        [ sectionLabel "Thermal Mass"
+        , div [ style "display" "flex", style "flex-direction" "column", style "gap" "0.2rem" ]
+            [ radioRow (thermalMassLabel LightMass)  (m.thermalMass == LightMass)  (SetThermalMass LightMass)
+            , radioRow (thermalMassLabel MediumMass) (m.thermalMass == MediumMass) (SetThermalMass MediumMass)
+            , radioRow (thermalMassLabel HeavyMass)  (m.thermalMass == HeavyMass)  (SetThermalMass HeavyMass)
+            ]
         ]
 
 
@@ -1360,8 +1626,13 @@ ufhCard model u =
 runningCard : UFHResults -> Html Msg
 runningCard u =
     card "#f5f7ff" "Annual Energy"
-        [ detailRow "Heat demand"       (String.fromInt (round u.annualHeatKwh)) "kWh/yr"
-        , detailRow "Electricity (HP)"  (String.fromInt (round u.annualElecKwh)) "kWh/yr"
+        [ detailRow "Gross heat demand"   (String.fromInt (round u.annualHeatKwh))     "kWh/yr"
+        , detailRow "Solar gain (incident)" (String.fromInt (round u.annualSolarGain)) "kWh/yr"
+        , detailRow "  → useful (heating)" ("−" ++ String.fromInt (round u.annualUsefulGain)) "kWh/yr"
+        , detailRow "  → excess (cooling load)" (String.fromInt (round u.annualExcessGain)) "kWh/yr"
+        , detailRow "Net heat demand"     (String.fromInt (round u.annualNetHeatKwh))  "kWh/yr"
+        , hr [ style "border" "none", style "border-top" "1px solid #dde3f0", style "margin" "0.4rem 0" ] []
+        , detailRow "Electricity (HP)"    (String.fromInt (round u.annualElecKwh))      "kWh/yr"
         ]
 
 
