@@ -131,6 +131,7 @@ suite =
                         , summerTempOut = "28"
                         , householdElecKwh = "3500"
                         , evMilesPerYear = "8000"
+                        , batteryKwh = "5"
                         }
                 in
                 decodeParams pinned

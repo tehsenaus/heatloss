@@ -234,6 +234,7 @@ type alias Model =
     , summerTempOut : String
     , householdElecKwh : String
     , evMilesPerYear : String
+    , batteryKwh : String
     }
 
 
@@ -293,6 +294,7 @@ defaultModel =
     , summerTempOut = "28"
     , householdElecKwh = "3500"
     , evMilesPerYear = "8000"
+    , batteryKwh = "5"
     }
 
 
@@ -451,6 +453,7 @@ encodeParams m =
     , toF m.summerTempOut
     , toF m.householdElecKwh
     , toF m.evMilesPerYear
+    , toF m.batteryKwh
     ]
 
 
@@ -500,6 +503,7 @@ decodeParams floats =
     , summerTempOut   = getS 28 d.summerTempOut
     , householdElecKwh = getS 29 d.householdElecKwh
     , evMilesPerYear  = getS 30 d.evMilesPerYear
+    , batteryKwh      = getS 31 d.batteryKwh
     }
 
 
@@ -539,6 +543,7 @@ type Msg
     | SetSummerTempOut String
     | SetHouseholdElecKwh String
     | SetEvMilesPerYear String
+    | SetBatteryKwh String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -584,6 +589,7 @@ updateField msg model =
         SetSummerTempOut v  -> { model | summerTempOut = v }
         SetHouseholdElecKwh v -> { model | householdElecKwh = v }
         SetEvMilesPerYear v -> { model | evMilesPerYear = v }
+        SetBatteryKwh v     -> { model | batteryKwh = v }
 
 
 
@@ -1050,18 +1056,32 @@ calculateCooling m r =
 
 
 type alias MonthlyRow =
-    { month          : String
-    , pvKwh          : Float
-    , demandDayKwh   : Float
-    , demandNightKwh : Float
-    , grossHeatKwh   : Float
-    , solarGainKwh   : Float
-    , usefulGainKwh  : Float
-    , coolingKwh     : Float
-    , coolingElecKwh : Float
-    , householdKwh   : Float
-    , evKwh          : Float
-    , daysInMonth    : Float
+    { month            : String
+    , pvKwh            : Float
+    , grossHeatKwh     : Float
+    , solarGainKwh     : Float
+    , usefulGainKwh    : Float
+    , coolingKwh       : Float
+    -- Day demand stack (kWh/day)
+    , dayHpKwh         : Float
+    , dayCoolKwh       : Float
+    , dayHouseholdKwh  : Float
+    , dayEvKwh         : Float
+    -- Night demand stack (kWh/day)
+    , nightHpKwh       : Float
+    , nightCoolKwh     : Float
+    , nightHouseholdKwh : Float
+    , nightEvKwh       : Float
+    -- Battery throughput (kWh/day). One of these is non-zero per month:
+    --   batteryDischargeKwh = battery → load (PV-stored discharged at
+    --     night in summer, OR off-peak grid-stored discharged in day in
+    --     winter — same magnitude, different direction).
+    --   nightChargeFromGridKwh = grid → battery overnight (winter only),
+    --     stacked into night demand to reflect actual grid import.
+    , batteryDischargeKwh    : Float
+    , nightChargeFromGridKwh : Float
+    , winterMode             : Bool
+    , daysInMonth            : Float
     }
 
 
@@ -1120,6 +1140,8 @@ monthlyBreakdown m r u pv =
         householdDaily  = annualHousehold / 365
         annualEvMiles   = String.toFloat m.evMilesPerYear |> Maybe.withDefault 0
         milesPerDay     = annualEvMiles / 365
+
+        batteryKwh = String.toFloat m.batteryKwh |> Maybe.withDefault 0
     in
     List.map5
         (\name ( hddF, pvF ) dl days avgT ->
@@ -1164,22 +1186,82 @@ monthlyBreakdown m r u pv =
                 coolingNightDemand = Basics.max 0 (internalNight - freeCoolNight)
 
                 coolingDaily = coolingDayDemand + coolingNightDemand
-                coolingElec  = coolingDaily / coolingScop
 
+                -- Cooling elec, split day/night per the demand split.
+                coolDayElec   = coolingDayDemand / coolingScop
+                coolNightElec = coolingNightDemand / coolingScop
+
+                -- Heating elec day/night.
+                hpDay   = netElec * dayFrac / days
+                hpNight = netElec * (1 - dayFrac) / days
+
+                -- Household elec day/night (60/40 split).
+                householdDay   = householdDaily * internalGainDayFrac
+                householdNight = householdDaily * (1 - internalGainDayFrac)
+
+                -- EV daily kWh.
                 evDaily = milesPerDay * evWhPerMile avgT / 1000
+
+                pvDaily = pv.annualKwh * pvF / days
+                dayLoad = hpDay + coolDayElec + householdDay
+
+                -- Mode switch: if there's no daytime PV surplus to store,
+                -- assume the user is on a winter strategy — charge the
+                -- battery overnight on cheap off-peak rates and discharge
+                -- it during the day. (And the EV always charges overnight
+                -- in winter since there's no surplus to use during the day.)
+                winterMode = pvDaily <= dayLoad
+
+                ( pvToEvDay, batteryDischarge, nightChargeFromGrid ) =
+                    if winterMode then
+                        let
+                            dayShortfall = dayLoad - pvDaily
+                            batToDay     = Basics.min batteryKwh dayShortfall
+                        in
+                        -- EV charges overnight (no surplus to use), battery
+                        -- charges overnight from grid by the amount it
+                        -- will discharge during the day.
+                        ( 0, batToDay, batToDay )
+
+                    else
+                        -- Summer-style: day load → EV (direct) → battery.
+                        -- Battery discharges to night load.
+                        let
+                            surplusAfterLoad = pvDaily - dayLoad
+                            toEv             = Basics.min surplusAfterLoad evDaily
+                            surplusAfterEv   = surplusAfterLoad - toEv
+                            toBattery        = Basics.min surplusAfterEv batteryKwh
+
+                            evNight =
+                                evDaily - toEv
+
+                            nightLoadForBattery =
+                                hpNight + coolNightElec + householdNight + evNight
+
+                            batToNight = Basics.min toBattery nightLoadForBattery
+                        in
+                        ( toEv, batToNight, 0 )
+
+                evRemaining = evDaily - pvToEvDay
             in
-            { month          = name
-            , pvKwh          = pv.annualKwh * pvF / days
-            , demandDayKwh   = netElec * dayFrac / days
-            , demandNightKwh = netElec * (1 - dayFrac) / days
-            , grossHeatKwh   = grossHeat / days
-            , solarGainKwh   = gain / days
-            , usefulGainKwh  = useful / days
-            , coolingKwh     = coolingDaily
-            , coolingElecKwh = coolingElec
-            , householdKwh   = householdDaily
-            , evKwh          = evDaily
-            , daysInMonth    = days
+            { month            = name
+            , pvKwh            = pvDaily
+            , grossHeatKwh     = grossHeat / days
+            , solarGainKwh     = gain / days
+            , usefulGainKwh    = useful / days
+            , coolingKwh       = coolingDaily
+            , dayHpKwh         = hpDay
+            , dayCoolKwh       = coolDayElec
+            , dayHouseholdKwh  = householdDay
+            , dayEvKwh         = pvToEvDay
+            , nightHpKwh       = hpNight
+            , nightCoolKwh     = coolNightElec
+            , nightHouseholdKwh = householdNight
+            , nightEvKwh       = evRemaining
+            , batteryDischargeKwh    = batteryDischarge
+            , nightChargeFromGridKwh = nightChargeFromGrid
+            , winterMode             = winterMode
+            , daysInMonth            = days
             }
         )
         monthNames
@@ -1237,8 +1319,14 @@ monthlyChartSection model maybeR =
             let
                 rows = monthlyBreakdown model r u pv
                 maxVal =
+                    let
+                        daySupply m = m.pvKwh + (if m.winterMode then m.batteryDischargeKwh else 0)
+                        dayD m = m.dayHpKwh + m.dayCoolKwh + m.dayHouseholdKwh + m.dayEvKwh
+                        nightSupply m = if m.winterMode then 0 else m.batteryDischargeKwh
+                        nightD m = m.nightHpKwh + m.nightCoolKwh + m.nightHouseholdKwh + m.nightEvKwh + m.nightChargeFromGridKwh
+                    in
                     rows
-                        |> List.map (\m -> Basics.max m.pvKwh (m.demandDayKwh + m.demandNightKwh + m.coolingElecKwh + m.householdKwh + m.evKwh))
+                        |> List.map (\m -> List.maximum [ daySupply m, dayD m, nightSupply m, nightD m ] |> Maybe.withDefault 0)
                         |> List.maximum
                         |> Maybe.withDefault 1
             in
@@ -1258,7 +1346,12 @@ monthlyChartSection model maybeR =
                     ]
                     [ text "Monthly — Heat Pump Electricity vs Solar PV" ]
                 , chartLegend
-                , monthlyChart rows maxVal
+                , p [ style "font-size" "0.7rem", style "color" "#888", style "margin" "0.5rem 0 0.25rem" ]
+                    [ text "Day (during daylight hours)" ]
+                , dayNightChart rows maxVal True
+                , p [ style "font-size" "0.7rem", style "color" "#888", style "margin" "1rem 0 0.25rem" ]
+                    [ text "Night" ]
+                , dayNightChart rows maxVal False
                 , heatChartSection rows
                 , coolingChartSection rows
                 ]
@@ -1473,10 +1566,11 @@ chartLegend =
         , style "color" "#555"
         , style "margin-bottom" "0.75rem"
         ]
-        [ legendSwatch "#2e7d32" "PV generation (day)"
-        , legendSwatch "#c77700" "HP demand — day"
-        , legendSwatch "#6a4b8a" "HP demand — night"
-        , legendSwatch "#3b82c4" "HP demand — cooling"
+        [ legendSwatch "#2e7d32" "Day PV"
+        , legendSwatch "#d4a017" "Battery (summer: night discharge / winter: off-peak charge)"
+        , legendSwatch "#c77700" "HP heating (day)"
+        , legendSwatch "#6a4b8a" "HP heating (night)"
+        , legendSwatch "#3b82c4" "HP cooling"
         , legendSwatch "#888888" "Household"
         , legendSwatch "#444466" "EV"
         ]
@@ -1496,28 +1590,60 @@ legendSwatch colour label =
         ]
 
 
-monthlyChart : List MonthlyRow -> Float -> Html Msg
-monthlyChart rows maxVal =
+dayNightChart : List MonthlyRow -> Float -> Bool -> Html Msg
+dayNightChart rows maxVal isDay =
     let
-        chartH = 180.0
+        chartH = 140.0
+        barW = 14.0
 
-        bar colour h =
+        bar colour px =
             div
-                [ style "width" "14px"
-                , style "height" (String.fromFloat h ++ "px")
+                [ style "width" (String.fromFloat barW ++ "px")
+                , style "height" (String.fromFloat px ++ "px")
                 , style "background" colour
                 ]
                 []
 
+        h v = v * chartH / Basics.max maxVal 0.001
+
+        stack segs =
+            let
+                total = List.sum (List.map Tuple.first segs)
+            in
+            div
+                [ style "display" "flex"
+                , style "flex-direction" "column-reverse"
+                , style "height" (String.fromFloat (h total) ++ "px")
+                , style "width" (String.fromFloat barW ++ "px")
+                ]
+                (List.map (\( v, c ) -> bar c (h v)) segs)
+
+        supplyAndDemand row =
+            if isDay then
+                ( [ ( row.pvKwh, "#2e7d32" )
+                  , ( if row.winterMode then row.batteryDischargeKwh else 0, "#d4a017" )
+                  ]
+                , [ ( row.dayHpKwh,        "#c77700" )
+                  , ( row.dayCoolKwh,      "#3b82c4" )
+                  , ( row.dayHouseholdKwh, "#888888" )
+                  , ( row.dayEvKwh,        "#444466" )
+                  ]
+                )
+
+            else
+                ( [ ( if row.winterMode then 0 else row.batteryDischargeKwh, "#d4a017" )
+                  ]
+                , [ ( row.nightHpKwh,            "#6a4b8a" )
+                  , ( row.nightCoolKwh,          "#3b82c4" )
+                  , ( row.nightHouseholdKwh,     "#888888" )
+                  , ( row.nightEvKwh,            "#444466" )
+                  , ( row.nightChargeFromGridKwh, "#d4a017" )
+                  ]
+                )
+
         column row =
             let
-                pvH       = row.pvKwh * chartH / maxVal
-                dayH      = row.demandDayKwh * chartH / maxVal
-                nightH    = row.demandNightKwh * chartH / maxVal
-                coolH     = row.coolingElecKwh * chartH / maxVal
-                householdH = row.householdKwh * chartH / maxVal
-                evH       = row.evKwh * chartH / maxVal
-                demandH   = dayH + nightH + coolH + householdH + evH
+                ( supply, demand ) = supplyAndDemand row
             in
             div [ style "display" "flex", style "flex-direction" "column", style "align-items" "center", style "gap" "0.4rem", style "flex" "1" ]
                 [ div
@@ -1526,19 +1652,8 @@ monthlyChart rows maxVal =
                     , style "gap" "3px"
                     , style "height" (String.fromFloat chartH ++ "px")
                     ]
-                    [ bar "#2e7d32" pvH
-                    , div
-                        [ style "display" "flex"
-                        , style "flex-direction" "column-reverse"
-                        , style "height" (String.fromFloat demandH ++ "px")
-                        , style "width" "14px"
-                        ]
-                        [ bar "#c77700" dayH
-                        , bar "#6a4b8a" nightH
-                        , bar "#3b82c4" coolH
-                        , bar "#888888" householdH
-                        , bar "#444466" evH
-                        ]
+                    [ stack supply
+                    , stack demand
                     ]
                 , div [ style "font-size" "0.72rem", style "color" "#666" ] [ text row.month ]
                 ]
@@ -1608,6 +1723,7 @@ inputsPanel m =
         , inputSection "Other Electricity"
             [ inputRow "Household baseload" "kWh/yr" m.householdElecKwh SetHouseholdElecKwh "0" "100"
             , inputRow "EV mileage" "mi/yr" m.evMilesPerYear SetEvMilesPerYear "0" "500"
+            , inputRow "Home battery" "kWh" m.batteryKwh SetBatteryKwh "0" "1"
             ]
         , pvSection m
         ]
@@ -1899,16 +2015,14 @@ resultsPanel model maybeR =
                     Just ( u, pv ) ->
                         let
                             rows = monthlyBreakdown model r u pv
-                            annualCoolKwh =
-                                rows |> List.map (\row -> row.coolingKwh * row.daysInMonth) |> List.sum
-                            annualCoolElec =
-                                rows |> List.map (\row -> row.coolingElecKwh * row.daysInMonth) |> List.sum
-                            annualEvKwh =
-                                rows |> List.map (\row -> row.evKwh * row.daysInMonth) |> List.sum
-                            annualHouseholdKwh =
-                                rows |> List.map (\row -> row.householdKwh * row.daysInMonth) |> List.sum
+                            sumOver f = rows |> List.map (\row -> f row * row.daysInMonth) |> List.sum
+                            annualCoolKwh   = sumOver .coolingKwh
+                            annualCoolElec  = sumOver (\row -> row.dayCoolKwh + row.nightCoolKwh)
+                            annualEvKwh     = sumOver (\row -> row.dayEvKwh + row.nightEvKwh)
+                            annualHouseholdKwh = sumOver (\row -> row.dayHouseholdKwh + row.nightHouseholdKwh)
+                            annualBatteryKwh = sumOver .batteryDischargeKwh
                         in
-                        runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh
+                        runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualBatteryKwh
 
                     Nothing ->
                         text ""
@@ -2016,8 +2130,8 @@ ufhCard model u =
         ]
 
 
-runningCard : UFHResults -> Float -> Float -> Float -> Float -> Html Msg
-runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh =
+runningCard : UFHResults -> Float -> Float -> Float -> Float -> Float -> Html Msg
+runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualBatteryKwh =
     let
         totalElec = u.annualElecKwh + annualCoolElec + annualHouseholdKwh + annualEvKwh
     in
@@ -2035,6 +2149,8 @@ runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh =
         , detailRow "Electricity (household)" (String.fromInt (round annualHouseholdKwh)) "kWh/yr"
         , detailRow "Electricity (EV)"        (String.fromInt (round annualEvKwh))        "kWh/yr"
         , detailRow "Electricity (total)"     (String.fromInt (round totalElec))          "kWh/yr"
+        , hr [ style "border" "none", style "border-top" "1px solid #dde3f0", style "margin" "0.4rem 0" ] []
+        , detailRow "Battery throughput" (String.fromInt (round annualBatteryKwh)) "kWh/yr"
         ]
 
 

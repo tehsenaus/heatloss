@@ -5204,7 +5204,7 @@ var $author$project$Main$Slight = {$: 'Slight'};
 var $author$project$Main$South = {$: 'South'};
 var $author$project$Main$Tile = {$: 'Tile'};
 var $author$project$Main$VaultedRoof = {$: 'VaultedRoof'};
-var $author$project$Main$defaultModel = {ach: '0.5', emitterDeltaT: '5', evMilesPerYear: '8000', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', gValue: '0.6', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', householdElecKwh: '3500', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, summerTempOut: '28', tempIn: '21', tempOut: '-3', thermalMass: $author$project$Main$MediumMass, totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
+var $author$project$Main$defaultModel = {ach: '0.5', batteryKwh: '5', emitterDeltaT: '5', evMilesPerYear: '8000', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', gValue: '0.6', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', householdElecKwh: '3500', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, summerTempOut: '28', tempIn: '21', tempOut: '-3', thermalMass: $author$project$Main$MediumMass, totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
 var $author$project$Main$Carpet = {$: 'Carpet'};
 var $author$project$Main$Wood = {$: 'Wood'};
 var $elm$core$Basics$round = _Basics_round;
@@ -5476,6 +5476,7 @@ var $author$project$Main$decodeParams = function (floats) {
 		});
 	return {
 		ach: A2(getS, 12, d.ach),
+		batteryKwh: A2(getS, 31, d.batteryKwh),
 		emitterDeltaT: A2(getS, 21, d.emitterDeltaT),
 		evMilesPerYear: A2(getS, 30, d.evMilesPerYear),
 		floorCovering: $author$project$Main$floorCoveringFromF(
@@ -5597,7 +5598,8 @@ var $author$project$Main$encodeParams = function (m) {
 			$author$project$Main$thermalMassToF(m.thermalMass),
 			$author$project$Main$toF(m.summerTempOut),
 			$author$project$Main$toF(m.householdElecKwh),
-			$author$project$Main$toF(m.evMilesPerYear)
+			$author$project$Main$toF(m.evMilesPerYear),
+			$author$project$Main$toF(m.batteryKwh)
 		]);
 };
 var $elm$json$Json$Encode$float = _Json_wrap;
@@ -5766,11 +5768,16 @@ var $author$project$Main$updateField = F2(
 				return _Utils_update(
 					model,
 					{householdElecKwh: v});
-			default:
+			case 'SetEvMilesPerYear':
 				var v = msg.a;
 				return _Utils_update(
 					model,
 					{evMilesPerYear: v});
+			default:
+				var v = msg.a;
+				return _Utils_update(
+					model,
+					{batteryKwh: v});
 		}
 	});
 var $author$project$Main$update = F2(
@@ -5963,6 +5970,9 @@ var $author$project$Main$calculate = function (m) {
 };
 var $elm$html$Html$div = _VirtualDom_node('div');
 var $elm$html$Html$h1 = _VirtualDom_node('h1');
+var $author$project$Main$SetBatteryKwh = function (a) {
+	return {$: 'SetBatteryKwh', a: a};
+};
 var $author$project$Main$SetEvMilesPerYear = function (a) {
 	return {$: 'SetEvMilesPerYear', a: a};
 };
@@ -6815,7 +6825,8 @@ var $author$project$Main$inputsPanel = function (m) {
 				_List_fromArray(
 					[
 						A6($author$project$Main$inputRow, 'Household baseload', 'kWh/yr', m.householdElecKwh, $author$project$Main$SetHouseholdElecKwh, '0', '100'),
-						A6($author$project$Main$inputRow, 'EV mileage', 'mi/yr', m.evMilesPerYear, $author$project$Main$SetEvMilesPerYear, '0', '500')
+						A6($author$project$Main$inputRow, 'EV mileage', 'mi/yr', m.evMilesPerYear, $author$project$Main$SetEvMilesPerYear, '0', '500'),
+						A6($author$project$Main$inputRow, 'Home battery', 'kWh', m.batteryKwh, $author$project$Main$SetBatteryKwh, '0', '1')
 					])),
 				$author$project$Main$pvSection(m)
 			]));
@@ -7093,10 +7104,11 @@ var $author$project$Main$chartLegend = A2(
 		]),
 	_List_fromArray(
 		[
-			A2($author$project$Main$legendSwatch, '#2e7d32', 'PV generation (day)'),
-			A2($author$project$Main$legendSwatch, '#c77700', 'HP demand — day'),
-			A2($author$project$Main$legendSwatch, '#6a4b8a', 'HP demand — night'),
-			A2($author$project$Main$legendSwatch, '#3b82c4', 'HP demand — cooling'),
+			A2($author$project$Main$legendSwatch, '#2e7d32', 'Day PV'),
+			A2($author$project$Main$legendSwatch, '#d4a017', 'Battery (summer: night discharge / winter: off-peak charge)'),
+			A2($author$project$Main$legendSwatch, '#c77700', 'HP heating (day)'),
+			A2($author$project$Main$legendSwatch, '#6a4b8a', 'HP heating (night)'),
+			A2($author$project$Main$legendSwatch, '#3b82c4', 'HP cooling'),
 			A2($author$project$Main$legendSwatch, '#888888', 'Household'),
 			A2($author$project$Main$legendSwatch, '#444466', 'EV')
 		]));
@@ -7300,6 +7312,204 @@ var $author$project$Main$coolingChartSection = function (rows) {
 				maxC)
 			]));
 };
+var $author$project$Main$dayNightChart = F3(
+	function (rows, maxVal, isDay) {
+		var supplyAndDemand = function (row) {
+			return isDay ? _Utils_Tuple2(
+				_List_fromArray(
+					[
+						_Utils_Tuple2(row.pvKwh, '#2e7d32'),
+						_Utils_Tuple2(
+						row.winterMode ? row.batteryDischargeKwh : 0,
+						'#d4a017')
+					]),
+				_List_fromArray(
+					[
+						_Utils_Tuple2(row.dayHpKwh, '#c77700'),
+						_Utils_Tuple2(row.dayCoolKwh, '#3b82c4'),
+						_Utils_Tuple2(row.dayHouseholdKwh, '#888888'),
+						_Utils_Tuple2(row.dayEvKwh, '#444466')
+					])) : _Utils_Tuple2(
+				_List_fromArray(
+					[
+						_Utils_Tuple2(
+						row.winterMode ? 0 : row.batteryDischargeKwh,
+						'#d4a017')
+					]),
+				_List_fromArray(
+					[
+						_Utils_Tuple2(row.nightHpKwh, '#6a4b8a'),
+						_Utils_Tuple2(row.nightCoolKwh, '#3b82c4'),
+						_Utils_Tuple2(row.nightHouseholdKwh, '#888888'),
+						_Utils_Tuple2(row.nightEvKwh, '#444466'),
+						_Utils_Tuple2(row.nightChargeFromGridKwh, '#d4a017')
+					]));
+		};
+		var chartH = 140.0;
+		var h = function (v) {
+			return (v * chartH) / A2($elm$core$Basics$max, maxVal, 0.001);
+		};
+		var yLabel = function (v) {
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+						A2($elm$html$Html$Attributes$style, 'right', '0.5rem'),
+						A2(
+						$elm$html$Html$Attributes$style,
+						'top',
+						$elm$core$String$fromFloat(chartH * (1 - (v / maxVal))) + 'px'),
+						A2($elm$html$Html$Attributes$style, 'font-size', '0.7rem'),
+						A2($elm$html$Html$Attributes$style, 'color', '#888'),
+						A2($elm$html$Html$Attributes$style, 'transform', 'translateY(-50%)'),
+						A2($elm$html$Html$Attributes$style, 'white-space', 'nowrap'),
+						A2($elm$html$Html$Attributes$style, 'text-align', 'right')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text(
+						$elm$core$String$fromInt(
+							$elm$core$Basics$round(v)) + ' kWh/day')
+					]));
+		};
+		var barW = 14.0;
+		var bar = F2(
+			function (colour, px) {
+				return A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$Attributes$style,
+							'width',
+							$elm$core$String$fromFloat(barW) + 'px'),
+							A2(
+							$elm$html$Html$Attributes$style,
+							'height',
+							$elm$core$String$fromFloat(px) + 'px'),
+							A2($elm$html$Html$Attributes$style, 'background', colour)
+						]),
+					_List_Nil);
+			});
+		var stack = function (segs) {
+			var total = $elm$core$List$sum(
+				A2($elm$core$List$map, $elm$core$Tuple$first, segs));
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+						A2($elm$html$Html$Attributes$style, 'flex-direction', 'column-reverse'),
+						A2(
+						$elm$html$Html$Attributes$style,
+						'height',
+						$elm$core$String$fromFloat(
+							h(total)) + 'px'),
+						A2(
+						$elm$html$Html$Attributes$style,
+						'width',
+						$elm$core$String$fromFloat(barW) + 'px')
+					]),
+				A2(
+					$elm$core$List$map,
+					function (_v1) {
+						var v = _v1.a;
+						var c = _v1.b;
+						return A2(
+							bar,
+							c,
+							h(v));
+					},
+					segs));
+		};
+		var column = function (row) {
+			var _v0 = supplyAndDemand(row);
+			var supply = _v0.a;
+			var demand = _v0.b;
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+						A2($elm$html$Html$Attributes$style, 'flex-direction', 'column'),
+						A2($elm$html$Html$Attributes$style, 'align-items', 'center'),
+						A2($elm$html$Html$Attributes$style, 'gap', '0.4rem'),
+						A2($elm$html$Html$Attributes$style, 'flex', '1')
+					]),
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+								A2($elm$html$Html$Attributes$style, 'align-items', 'flex-end'),
+								A2($elm$html$Html$Attributes$style, 'gap', '3px'),
+								A2(
+								$elm$html$Html$Attributes$style,
+								'height',
+								$elm$core$String$fromFloat(chartH) + 'px')
+							]),
+						_List_fromArray(
+							[
+								stack(supply),
+								stack(demand)
+							])),
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'font-size', '0.72rem'),
+								A2($elm$html$Html$Attributes$style, 'color', '#666')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text(row.month)
+							]))
+					]));
+		};
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+					A2($elm$html$Html$Attributes$style, 'gap', '0.25rem'),
+					A2($elm$html$Html$Attributes$style, 'padding-left', '3.5rem'),
+					A2($elm$html$Html$Attributes$style, 'position', 'relative')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+							A2($elm$html$Html$Attributes$style, 'left', '0'),
+							A2($elm$html$Html$Attributes$style, 'top', '0'),
+							A2($elm$html$Html$Attributes$style, 'width', '3.5rem'),
+							A2(
+							$elm$html$Html$Attributes$style,
+							'height',
+							$elm$core$String$fromFloat(chartH) + 'px')
+						]),
+					_List_fromArray(
+						[
+							yLabel(maxVal),
+							yLabel(maxVal / 2),
+							yLabel(0)
+						])),
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+							A2($elm$html$Html$Attributes$style, 'flex', '1'),
+							A2($elm$html$Html$Attributes$style, 'gap', '0.25rem')
+						]),
+					A2($elm$core$List$map, column, rows))
+				]));
+	});
 var $author$project$Main$heatChart = F2(
 	function (rows, maxVal) {
 		var chartH = 160.0;
@@ -7512,6 +7722,10 @@ var $author$project$Main$evWhPerMile = function (avgTempC) {
 var $author$project$Main$internalGainDayFrac = 0.6;
 var $author$project$Main$internalGainsWperM2 = 4;
 var $elm$core$List$map5 = _List_map5;
+var $elm$core$Basics$min = F2(
+	function (x, y) {
+		return (_Utils_cmp(x, y) < 0) ? x : y;
+	});
 var $author$project$Main$monthNames = _List_fromArray(
 	['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']);
 var $author$project$Main$monthlyAvgTempC = _List_fromArray(
@@ -7533,6 +7747,10 @@ var $author$project$Main$monthlyBreakdown = F4(
 			$elm$core$Maybe$withDefault,
 			$author$project$Main$coolingSetpoint,
 			$elm$core$String$toFloat(m.tempIn));
+		var batteryKwh = A2(
+			$elm$core$Maybe$withDefault,
+			0,
+			$elm$core$String$toFloat(m.batteryKwh));
 		var annualHousehold = A2(
 			$elm$core$Maybe$withDefault,
 			0,
@@ -7549,10 +7767,13 @@ var $author$project$Main$monthlyBreakdown = F4(
 				function (name, _v0, dl, days, avgT) {
 					var hddF = _v0.a;
 					var pvF = _v0.b;
+					var pvDaily = (pv.annualKwh * pvF) / days;
 					var nightT = avgT - $author$project$Main$diurnalSwing;
 					var nightHours = 24 - dl;
 					var internalNight = internalDaily * (1 - $author$project$Main$internalGainDayFrac);
 					var internalDay = internalDaily * $author$project$Main$internalGainDayFrac;
+					var householdNight = householdDaily * (1 - $author$project$Main$internalGainDayFrac);
+					var householdDay = householdDaily * $author$project$Main$internalGainDayFrac;
 					var grossHeat = u.annualHeatKwh * hddF;
 					var gain = u.annualSolarGain * pvF;
 					var useful = (grossHeat < 0.001) ? 0 : (A2($author$project$Main$utilisationFactor, gain / grossHeat, tau) * gain);
@@ -7565,169 +7786,42 @@ var $author$project$Main$monthlyBreakdown = F4(
 					var dayHours = dl;
 					var freeCoolDay = ((ua * A2($elm$core$Basics$max, 0, coolTarget - dayT)) * dayHours) / 1000;
 					var dayFrac = dl / 24;
+					var hpDay = (netElec * dayFrac) / days;
+					var hpNight = (netElec * (1 - dayFrac)) / days;
 					var coolingNightDemand = A2($elm$core$Basics$max, 0, internalNight - freeCoolNight);
 					var coolingDayDemand = A2($elm$core$Basics$max, 0, (excessSolarDay + internalDay) - freeCoolDay);
 					var coolingDaily = coolingDayDemand + coolingNightDemand;
-					var coolingElec = coolingDaily / $author$project$Main$coolingScop;
-					return {coolingElecKwh: coolingElec, coolingKwh: coolingDaily, daysInMonth: days, demandDayKwh: (netElec * dayFrac) / days, demandNightKwh: (netElec * (1 - dayFrac)) / days, evKwh: evDaily, grossHeatKwh: grossHeat / days, householdKwh: householdDaily, month: name, pvKwh: (pv.annualKwh * pvF) / days, solarGainKwh: gain / days, usefulGainKwh: useful / days};
+					var coolNightElec = coolingNightDemand / $author$project$Main$coolingScop;
+					var coolDayElec = coolingDayDemand / $author$project$Main$coolingScop;
+					var dayLoad = (hpDay + coolDayElec) + householdDay;
+					var winterMode = _Utils_cmp(pvDaily, dayLoad) < 1;
+					var _v1 = function () {
+						if (winterMode) {
+							var dayShortfall = dayLoad - pvDaily;
+							var batToDay = A2($elm$core$Basics$min, batteryKwh, dayShortfall);
+							return _Utils_Tuple3(0, batToDay, batToDay);
+						} else {
+							var surplusAfterLoad = pvDaily - dayLoad;
+							var toEv = A2($elm$core$Basics$min, surplusAfterLoad, evDaily);
+							var surplusAfterEv = surplusAfterLoad - toEv;
+							var toBattery = A2($elm$core$Basics$min, surplusAfterEv, batteryKwh);
+							var evNight = evDaily - toEv;
+							var nightLoadForBattery = ((hpNight + coolNightElec) + householdNight) + evNight;
+							var batToNight = A2($elm$core$Basics$min, toBattery, nightLoadForBattery);
+							return _Utils_Tuple3(toEv, batToNight, 0);
+						}
+					}();
+					var pvToEvDay = _v1.a;
+					var batteryDischarge = _v1.b;
+					var nightChargeFromGrid = _v1.c;
+					var evRemaining = evDaily - pvToEvDay;
+					return {batteryDischargeKwh: batteryDischarge, coolingKwh: coolingDaily, dayCoolKwh: coolDayElec, dayEvKwh: pvToEvDay, dayHouseholdKwh: householdDay, dayHpKwh: hpDay, daysInMonth: days, grossHeatKwh: grossHeat / days, month: name, nightChargeFromGridKwh: nightChargeFromGrid, nightCoolKwh: coolNightElec, nightEvKwh: evRemaining, nightHouseholdKwh: householdNight, nightHpKwh: hpNight, pvKwh: pvDaily, solarGainKwh: gain / days, usefulGainKwh: useful / days, winterMode: winterMode};
 				}),
 			$author$project$Main$monthNames,
 			A3($elm$core$List$map2, $elm$core$Tuple$pair, $author$project$Main$hddFractions, $author$project$Main$pvFractions),
 			$author$project$Main$daylightHours,
 			$author$project$Main$daysInMonth,
 			$author$project$Main$monthlyAvgTempC);
-	});
-var $author$project$Main$monthlyChart = F2(
-	function (rows, maxVal) {
-		var chartH = 180.0;
-		var yLabel = function (v) {
-			return A2(
-				$elm$html$Html$div,
-				_List_fromArray(
-					[
-						A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
-						A2($elm$html$Html$Attributes$style, 'right', '0.5rem'),
-						A2(
-						$elm$html$Html$Attributes$style,
-						'top',
-						$elm$core$String$fromFloat(chartH * (1 - (v / maxVal))) + 'px'),
-						A2($elm$html$Html$Attributes$style, 'font-size', '0.7rem'),
-						A2($elm$html$Html$Attributes$style, 'color', '#888'),
-						A2($elm$html$Html$Attributes$style, 'transform', 'translateY(-50%)'),
-						A2($elm$html$Html$Attributes$style, 'white-space', 'nowrap'),
-						A2($elm$html$Html$Attributes$style, 'text-align', 'right')
-					]),
-				_List_fromArray(
-					[
-						$elm$html$Html$text(
-						$elm$core$String$fromInt(
-							$elm$core$Basics$round(v)) + ' kWh/day')
-					]));
-		};
-		var bar = F2(
-			function (colour, h) {
-				return A2(
-					$elm$html$Html$div,
-					_List_fromArray(
-						[
-							A2($elm$html$Html$Attributes$style, 'width', '14px'),
-							A2(
-							$elm$html$Html$Attributes$style,
-							'height',
-							$elm$core$String$fromFloat(h) + 'px'),
-							A2($elm$html$Html$Attributes$style, 'background', colour)
-						]),
-					_List_Nil);
-			});
-		var column = function (row) {
-			var pvH = (row.pvKwh * chartH) / maxVal;
-			var nightH = (row.demandNightKwh * chartH) / maxVal;
-			var householdH = (row.householdKwh * chartH) / maxVal;
-			var evH = (row.evKwh * chartH) / maxVal;
-			var dayH = (row.demandDayKwh * chartH) / maxVal;
-			var coolH = (row.coolingElecKwh * chartH) / maxVal;
-			var demandH = (((dayH + nightH) + coolH) + householdH) + evH;
-			return A2(
-				$elm$html$Html$div,
-				_List_fromArray(
-					[
-						A2($elm$html$Html$Attributes$style, 'display', 'flex'),
-						A2($elm$html$Html$Attributes$style, 'flex-direction', 'column'),
-						A2($elm$html$Html$Attributes$style, 'align-items', 'center'),
-						A2($elm$html$Html$Attributes$style, 'gap', '0.4rem'),
-						A2($elm$html$Html$Attributes$style, 'flex', '1')
-					]),
-				_List_fromArray(
-					[
-						A2(
-						$elm$html$Html$div,
-						_List_fromArray(
-							[
-								A2($elm$html$Html$Attributes$style, 'display', 'flex'),
-								A2($elm$html$Html$Attributes$style, 'align-items', 'flex-end'),
-								A2($elm$html$Html$Attributes$style, 'gap', '3px'),
-								A2(
-								$elm$html$Html$Attributes$style,
-								'height',
-								$elm$core$String$fromFloat(chartH) + 'px')
-							]),
-						_List_fromArray(
-							[
-								A2(bar, '#2e7d32', pvH),
-								A2(
-								$elm$html$Html$div,
-								_List_fromArray(
-									[
-										A2($elm$html$Html$Attributes$style, 'display', 'flex'),
-										A2($elm$html$Html$Attributes$style, 'flex-direction', 'column-reverse'),
-										A2(
-										$elm$html$Html$Attributes$style,
-										'height',
-										$elm$core$String$fromFloat(demandH) + 'px'),
-										A2($elm$html$Html$Attributes$style, 'width', '14px')
-									]),
-								_List_fromArray(
-									[
-										A2(bar, '#c77700', dayH),
-										A2(bar, '#6a4b8a', nightH),
-										A2(bar, '#3b82c4', coolH),
-										A2(bar, '#888888', householdH),
-										A2(bar, '#444466', evH)
-									]))
-							])),
-						A2(
-						$elm$html$Html$div,
-						_List_fromArray(
-							[
-								A2($elm$html$Html$Attributes$style, 'font-size', '0.72rem'),
-								A2($elm$html$Html$Attributes$style, 'color', '#666')
-							]),
-						_List_fromArray(
-							[
-								$elm$html$Html$text(row.month)
-							]))
-					]));
-		};
-		return A2(
-			$elm$html$Html$div,
-			_List_fromArray(
-				[
-					A2($elm$html$Html$Attributes$style, 'display', 'flex'),
-					A2($elm$html$Html$Attributes$style, 'gap', '0.25rem'),
-					A2($elm$html$Html$Attributes$style, 'padding-left', '3.5rem'),
-					A2($elm$html$Html$Attributes$style, 'position', 'relative')
-				]),
-			_List_fromArray(
-				[
-					A2(
-					$elm$html$Html$div,
-					_List_fromArray(
-						[
-							A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
-							A2($elm$html$Html$Attributes$style, 'left', '0'),
-							A2($elm$html$Html$Attributes$style, 'top', '0'),
-							A2($elm$html$Html$Attributes$style, 'width', '3.5rem'),
-							A2(
-							$elm$html$Html$Attributes$style,
-							'height',
-							$elm$core$String$fromFloat(chartH) + 'px')
-						]),
-					_List_fromArray(
-						[
-							yLabel(maxVal),
-							yLabel(maxVal / 2),
-							yLabel(0)
-						])),
-					A2(
-					$elm$html$Html$div,
-					_List_fromArray(
-						[
-							A2($elm$html$Html$Attributes$style, 'display', 'flex'),
-							A2($elm$html$Html$Attributes$style, 'flex', '1'),
-							A2($elm$html$Html$Attributes$style, 'gap', '0.25rem')
-						]),
-					A2($elm$core$List$map, column, rows))
-				]));
 	});
 var $author$project$Main$monthlyChartSection = F2(
 	function (model, maybeR) {
@@ -7755,16 +7849,40 @@ var $author$project$Main$monthlyChartSection = F2(
 			var u = _v1.b;
 			var pv = _v1.c;
 			var rows = A4($author$project$Main$monthlyBreakdown, model, r, u, pv);
-			var maxVal = A2(
-				$elm$core$Maybe$withDefault,
-				1,
-				$elm$core$List$maximum(
-					A2(
-						$elm$core$List$map,
-						function (m) {
-							return A2($elm$core$Basics$max, m.pvKwh, (((m.demandDayKwh + m.demandNightKwh) + m.coolingElecKwh) + m.householdKwh) + m.evKwh);
-						},
-						rows)));
+			var maxVal = function () {
+				var nightSupply = function (m) {
+					return m.winterMode ? 0 : m.batteryDischargeKwh;
+				};
+				var nightD = function (m) {
+					return (((m.nightHpKwh + m.nightCoolKwh) + m.nightHouseholdKwh) + m.nightEvKwh) + m.nightChargeFromGridKwh;
+				};
+				var daySupply = function (m) {
+					return m.pvKwh + (m.winterMode ? m.batteryDischargeKwh : 0);
+				};
+				var dayD = function (m) {
+					return ((m.dayHpKwh + m.dayCoolKwh) + m.dayHouseholdKwh) + m.dayEvKwh;
+				};
+				return A2(
+					$elm$core$Maybe$withDefault,
+					1,
+					$elm$core$List$maximum(
+						A2(
+							$elm$core$List$map,
+							function (m) {
+								return A2(
+									$elm$core$Maybe$withDefault,
+									0,
+									$elm$core$List$maximum(
+										_List_fromArray(
+											[
+												daySupply(m),
+												dayD(m),
+												nightSupply(m),
+												nightD(m)
+											])));
+							},
+							rows)));
+			}();
 			return A2(
 				$elm$html$Html$div,
 				_List_fromArray(
@@ -7792,17 +7910,38 @@ var $author$project$Main$monthlyChartSection = F2(
 								$elm$html$Html$text('Monthly — Heat Pump Electricity vs Solar PV')
 							])),
 						$author$project$Main$chartLegend,
-						A2($author$project$Main$monthlyChart, rows, maxVal),
+						A2(
+						$elm$html$Html$p,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'font-size', '0.7rem'),
+								A2($elm$html$Html$Attributes$style, 'color', '#888'),
+								A2($elm$html$Html$Attributes$style, 'margin', '0.5rem 0 0.25rem')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text('Day (during daylight hours)')
+							])),
+						A3($author$project$Main$dayNightChart, rows, maxVal, true),
+						A2(
+						$elm$html$Html$p,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'font-size', '0.7rem'),
+								A2($elm$html$Html$Attributes$style, 'color', '#888'),
+								A2($elm$html$Html$Attributes$style, 'margin', '1rem 0 0.25rem')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text('Night')
+							])),
+						A3($author$project$Main$dayNightChart, rows, maxVal, false),
 						$author$project$Main$heatChartSection(rows),
 						$author$project$Main$coolingChartSection(rows)
 					]));
 		}
 	});
 var $author$project$Main$blindsFactor = 0.6;
-var $elm$core$Basics$min = F2(
-	function (x, y) {
-		return (_Utils_cmp(x, y) < 0) ? x : y;
-	});
 var $author$project$Main$peakHorizFromAnnual = function (annual) {
 	return A2($elm$core$Basics$min, 950, 0.85 * annual);
 };
@@ -8375,8 +8514,8 @@ var $author$project$Main$pvCard = F2(
 						]))
 				]));
 	});
-var $author$project$Main$runningCard = F5(
-	function (u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh) {
+var $author$project$Main$runningCard = F6(
+	function (u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh, annualBatteryKwh) {
 		var totalElec = ((u.annualElecKwh + annualCoolElec) + annualHouseholdKwh) + annualEvKwh;
 		return A3(
 			$author$project$Main$card,
@@ -8458,6 +8597,21 @@ var $author$project$Main$runningCard = F5(
 					'Electricity (total)',
 					$elm$core$String$fromInt(
 						$elm$core$Basics$round(totalElec)),
+					'kWh/yr'),
+					A2(
+					$elm$html$Html$hr,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'border', 'none'),
+							A2($elm$html$Html$Attributes$style, 'border-top', '1px solid #dde3f0'),
+							A2($elm$html$Html$Attributes$style, 'margin', '0.4rem 0')
+						]),
+					_List_Nil),
+					A3(
+					$author$project$Main$detailRow,
+					'Battery throughput',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(annualBatteryKwh)),
 					'kWh/yr')
 				]));
 	});
@@ -8619,35 +8773,36 @@ var $author$project$Main$resultsPanel = F2(
 							var u = _v4.a;
 							var pv = _v4.b;
 							var rows = A4($author$project$Main$monthlyBreakdown, model, r, u, pv);
-							var annualHouseholdKwh = $elm$core$List$sum(
-								A2(
-									$elm$core$List$map,
-									function (row) {
-										return row.householdKwh * row.daysInMonth;
-									},
-									rows));
-							var annualEvKwh = $elm$core$List$sum(
-								A2(
-									$elm$core$List$map,
-									function (row) {
-										return row.evKwh * row.daysInMonth;
-									},
-									rows));
-							var annualCoolKwh = $elm$core$List$sum(
-								A2(
-									$elm$core$List$map,
-									function (row) {
-										return row.coolingKwh * row.daysInMonth;
-									},
-									rows));
-							var annualCoolElec = $elm$core$List$sum(
-								A2(
-									$elm$core$List$map,
-									function (row) {
-										return row.coolingElecKwh * row.daysInMonth;
-									},
-									rows));
-							return A5($author$project$Main$runningCard, u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh);
+							var sumOver = function (f) {
+								return $elm$core$List$sum(
+									A2(
+										$elm$core$List$map,
+										function (row) {
+											return f(row) * row.daysInMonth;
+										},
+										rows));
+							};
+							var annualHouseholdKwh = sumOver(
+								function (row) {
+									return row.dayHouseholdKwh + row.nightHouseholdKwh;
+								});
+							var annualEvKwh = sumOver(
+								function (row) {
+									return row.dayEvKwh + row.nightEvKwh;
+								});
+							var annualCoolKwh = sumOver(
+								function ($) {
+									return $.coolingKwh;
+								});
+							var annualCoolElec = sumOver(
+								function (row) {
+									return row.dayCoolKwh + row.nightCoolKwh;
+								});
+							var annualBatteryKwh = sumOver(
+								function ($) {
+									return $.batteryDischargeKwh;
+								});
+							return A6($author$project$Main$runningCard, u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh, annualBatteryKwh);
 						} else {
 							return $elm$html$Html$text('');
 						}
