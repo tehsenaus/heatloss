@@ -1353,19 +1353,21 @@ monthlyBreakdown m r u pv =
                 pvToEvDay        = Basics.min pvSurplus evDaily
                 pvToDhwDay       = Basics.min (pvSurplus - pvToEvDay) dhwDaily
 
-                -- batteryKwh is usable (delivered) capacity. Charging
-                -- input needed = capacity / efficiency. Round-trip losses
-                -- are realised on the way out.
-                batteryChargeCap = batteryKwh / batteryEff
-                pvToBattery      = Basics.min (pvSurplus - pvToEvDay - pvToDhwDay) batteryChargeCap
-
                 evRemaining  = evDaily - pvToEvDay
                 dhwRemaining = dhwDaily - pvToDhwDay
 
                 nightLoadForBattery =
                     hpNight + coolNightElec + householdNight + evRemaining + dhwRemaining
 
-                batteryNightDischarge = Basics.min (pvToBattery * batteryEff) nightLoadForBattery
+                -- batteryKwh is usable (delivered) capacity. Charging
+                -- input needed = capacity / efficiency. Round-trip losses
+                -- are realised on the way out. Cap charge at what the
+                -- night load can absorb — no point storing PV we can't
+                -- discharge, it would just be export.
+                batteryChargeCap = Basics.min batteryKwh nightLoadForBattery / batteryEff
+                pvToBattery      = Basics.min (pvSurplus - pvToEvDay - pvToDhwDay) batteryChargeCap
+
+                batteryNightDischarge = pvToBattery * batteryEff
                 batteryDayDischarge   = Basics.min batteryKwh dayShortfall
                 nightChargeFromGrid   = batteryDayDischarge / batteryEff
             in

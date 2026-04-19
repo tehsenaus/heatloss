@@ -8215,9 +8215,9 @@ var $author$project$Main$monthlyBreakdown = F4(
 					var nightLoadForBattery = (((hpNight + coolNightElec) + householdNight) + evRemaining) + dhwRemaining;
 					var batteryDayDischarge = A2($elm$core$Basics$min, batteryKwh, dayShortfall);
 					var nightChargeFromGrid = batteryDayDischarge / $author$project$Main$batteryEff;
-					var batteryChargeCap = batteryKwh / $author$project$Main$batteryEff;
+					var batteryChargeCap = A2($elm$core$Basics$min, batteryKwh, nightLoadForBattery) / $author$project$Main$batteryEff;
 					var pvToBattery = A2($elm$core$Basics$min, (pvSurplus - pvToEvDay) - pvToDhwDay, batteryChargeCap);
-					var batteryNightDischarge = A2($elm$core$Basics$min, pvToBattery * $author$project$Main$batteryEff, nightLoadForBattery);
+					var batteryNightDischarge = pvToBattery * $author$project$Main$batteryEff;
 					return {
 						batteryDayChargeFromPvKwh: pvToBattery,
 						batteryDayDischargeKwh: batteryDayDischarge,
