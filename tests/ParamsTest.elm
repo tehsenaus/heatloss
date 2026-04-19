@@ -136,6 +136,7 @@ suite =
                         , dayRate = "27"
                         , nightRate = "7"
                         , exportRate = "15"
+                        , standingCharge = "60"
                         }
                 in
                 decodeParams pinned

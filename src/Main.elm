@@ -239,6 +239,7 @@ type alias Model =
     , dayRate : String
     , nightRate : String
     , exportRate : String
+    , standingCharge : String
     }
 
 
@@ -303,6 +304,7 @@ defaultModel =
     , dayRate = "27"
     , nightRate = "7"
     , exportRate = "15"
+    , standingCharge = "60"
     }
 
 
@@ -466,6 +468,7 @@ encodeParams m =
     , toF m.dayRate
     , toF m.nightRate
     , toF m.exportRate
+    , toF m.standingCharge
     ]
 
 
@@ -520,6 +523,7 @@ decodeParams floats =
     , dayRate         = getS 33 d.dayRate
     , nightRate       = getS 34 d.nightRate
     , exportRate      = getS 35 d.exportRate
+    , standingCharge  = getS 36 d.standingCharge
     }
 
 
@@ -564,6 +568,7 @@ type Msg
     | SetDayRate String
     | SetNightRate String
     | SetExportRate String
+    | SetStandingCharge String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -614,6 +619,7 @@ updateField msg model =
         SetDayRate v        -> { model | dayRate = v }
         SetNightRate v      -> { model | nightRate = v }
         SetExportRate v     -> { model | exportRate = v }
+        SetStandingCharge v -> { model | standingCharge = v }
 
 
 
@@ -694,6 +700,20 @@ coolingScop =
 dhwScop : Float
 dhwScop =
     2.5
+
+
+-- Home battery round-trip efficiency (AC-in to AC-out). Typical
+-- Li-ion residential systems: 85–92%.
+batteryEff : Float
+batteryEff =
+    0.9
+
+
+-- EV charging efficiency (socket to drive-battery). AC charger + onboard
+-- rectifier losses ~8–12%.
+evChargeEff : Float
+evChargeEff =
+    0.9
 
 
 -- Monthly DHW demand shape (normalised, sums to 1.0). Slight winter
@@ -1244,8 +1264,10 @@ monthlyBreakdown m r u pv =
                 householdDay   = householdDaily * internalGainDayFrac
                 householdNight = householdDaily * (1 - internalGainDayFrac)
 
-                -- EV daily kWh.
-                evDaily = milesPerDay * evWhPerMile avgT / 1000
+                -- EV daily kWh at the socket — wheel energy grossed up
+                -- for charger + AC→DC losses.
+                evDaily =
+                    milesPerDay * evWhPerMile avgT / 1000 / evChargeEff
 
                 -- DHW electricity per day (this month).
                 dhwDaily = (annualDhw * dhwF) / (dhwScop * days)
@@ -1265,7 +1287,12 @@ monthlyBreakdown m r u pv =
 
                 pvToEvDay        = Basics.min pvSurplus evDaily
                 pvToDhwDay       = Basics.min (pvSurplus - pvToEvDay) dhwDaily
-                pvToBattery      = Basics.min (pvSurplus - pvToEvDay - pvToDhwDay) batteryKwh
+
+                -- batteryKwh is usable (delivered) capacity. Charging
+                -- input needed = capacity / efficiency. Round-trip losses
+                -- are realised on the way out.
+                batteryChargeCap = batteryKwh / batteryEff
+                pvToBattery      = Basics.min (pvSurplus - pvToEvDay - pvToDhwDay) batteryChargeCap
 
                 evRemaining  = evDaily - pvToEvDay
                 dhwRemaining = dhwDaily - pvToDhwDay
@@ -1273,9 +1300,9 @@ monthlyBreakdown m r u pv =
                 nightLoadForBattery =
                     hpNight + coolNightElec + householdNight + evRemaining + dhwRemaining
 
-                batteryNightDischarge = Basics.min pvToBattery nightLoadForBattery
+                batteryNightDischarge = Basics.min (pvToBattery * batteryEff) nightLoadForBattery
                 batteryDayDischarge   = Basics.min batteryKwh dayShortfall
-                nightChargeFromGrid   = batteryDayDischarge
+                nightChargeFromGrid   = batteryDayDischarge / batteryEff
             in
             { month            = name
             , pvKwh            = pvDaily
@@ -1314,17 +1341,19 @@ monthlyBreakdown m r u pv =
 
 
 type alias Tariffs =
-    { dayRate : Float      -- p/kWh
-    , nightRate : Float    -- p/kWh
-    , exportRate : Float   -- p/kWh
+    { dayRate : Float         -- p/kWh
+    , nightRate : Float       -- p/kWh
+    , exportRate : Float      -- p/kWh
+    , standingCharge : Float  -- p/day
     }
 
 
 readTariffs : Model -> Tariffs
 readTariffs m =
-    { dayRate    = String.toFloat m.dayRate    |> Maybe.withDefault 0
-    , nightRate  = String.toFloat m.nightRate  |> Maybe.withDefault 0
-    , exportRate = String.toFloat m.exportRate |> Maybe.withDefault 0
+    { dayRate        = String.toFloat m.dayRate        |> Maybe.withDefault 0
+    , nightRate      = String.toFloat m.nightRate      |> Maybe.withDefault 0
+    , exportRate     = String.toFloat m.exportRate     |> Maybe.withDefault 0
+    , standingCharge = String.toFloat m.standingCharge |> Maybe.withDefault 0
     }
 
 
@@ -1334,6 +1363,7 @@ type alias CostRow =
     , exportKwh      : Float
     , dayCost        : Float  -- £/day
     , nightCost      : Float  -- £/day
+    , standingCost   : Float  -- £/day
     , exportCredit   : Float  -- £/day
     , netCost        : Float  -- £/day
     }
@@ -1364,17 +1394,19 @@ costForRow t row =
         export =
             Basics.max 0 (row.pvKwh - pvUsedByDay - row.batteryNightDischargeKwh)
 
-        dayCost      = dayImport   * t.dayRate    / 100
-        nightCost    = nightImport * t.nightRate  / 100
-        exportCredit = export      * t.exportRate / 100
+        dayCost      = dayImport   * t.dayRate        / 100
+        nightCost    = nightImport * t.nightRate      / 100
+        standingCost =               t.standingCharge / 100
+        exportCredit = export      * t.exportRate     / 100
     in
     { dayImportKwh   = dayImport
     , nightImportKwh = nightImport
     , exportKwh      = export
     , dayCost        = dayCost
     , nightCost      = nightCost
+    , standingCost   = standingCost
     , exportCredit   = exportCredit
-    , netCost        = dayCost + nightCost - exportCredit
+    , netCost        = dayCost + nightCost + standingCost - exportCredit
     }
 
 
@@ -1396,13 +1428,13 @@ view model =
             , style "font-weight" "700"
             , style "margin-bottom" "0.25rem"
             ]
-            [ text "Heat Loss Calculator" ]
+            [ text "Home Energy & Cost Modeller" ]
         , p
             [ style "color" "#666"
             , style "font-size" "0.9rem"
             , style "margin-bottom" "2rem"
             ]
-            [ text "Fabric + ventilation heat loss. Assumes square floor plan." ]
+            [ text "Heat loss, cooling, heat pump, hot water, PV, battery, EV and tariffs. Assumes square floor plan." ]
         , div
             [ style "display" "grid"
             , style "grid-template-columns" "1fr 1fr"
@@ -1958,13 +1990,14 @@ inputsPanel m =
         , inputSection "Other Electricity"
             [ inputRow "Household baseload" "kWh/yr" m.householdElecKwh SetHouseholdElecKwh "0" "100"
             , inputRow "EV mileage" "mi/yr" m.evMilesPerYear SetEvMilesPerYear "0" "500"
-            , inputRow "Home battery" "kWh" m.batteryKwh SetBatteryKwh "0" "1"
+            , inputRow "Home battery (usable)" "kWh" m.batteryKwh SetBatteryKwh "0" "1"
             ]
         , pvSection m
         , inputSection "Tariffs"
-            [ inputRow "Day rate"    "p/kWh" m.dayRate    SetDayRate    "0" "1"
-            , inputRow "Night rate"  "p/kWh" m.nightRate  SetNightRate  "0" "1"
-            , inputRow "Export rate" "p/kWh" m.exportRate SetExportRate "0" "1"
+            [ inputRow "Day rate"        "p/kWh" m.dayRate        SetDayRate        "0" "1"
+            , inputRow "Night rate"      "p/kWh" m.nightRate      SetNightRate      "0" "1"
+            , inputRow "Export rate"     "p/kWh" m.exportRate     SetExportRate     "0" "1"
+            , inputRow "Standing charge" "p/day" m.standingCharge SetStandingCharge "0" "5"
             ]
         ]
 
@@ -2262,19 +2295,23 @@ resultsPanel model maybeR =
                             annualHouseholdKwh = sumOver (\row -> row.dayHouseholdKwh + row.nightHouseholdKwh)
                             annualDhwElec = sumOver (\row -> row.dayDhwKwh + row.nightDhwKwh)
                             annualBatteryKwh = sumOver (\row -> row.batteryDayDischargeKwh + row.batteryNightDischargeKwh)
+                            batteryCapacity = String.toFloat model.batteryKwh |> Maybe.withDefault 0
+                            annualBatteryCycles =
+                                if batteryCapacity > 0 then annualBatteryKwh / batteryCapacity else 0
                             tariffs = readTariffs model
                             costRows = List.map (\row -> ( row, costForRow tariffs row )) rows
                             annualDayImport   = costRows |> List.map (\( row, c ) -> c.dayImportKwh   * row.daysInMonth) |> List.sum
                             annualNightImport = costRows |> List.map (\( row, c ) -> c.nightImportKwh * row.daysInMonth) |> List.sum
                             annualExport      = costRows |> List.map (\( row, c ) -> c.exportKwh      * row.daysInMonth) |> List.sum
-                            annualDayCost      = annualDayImport   * tariffs.dayRate    / 100
-                            annualNightCost    = annualNightImport * tariffs.nightRate  / 100
-                            annualExportCredit = annualExport      * tariffs.exportRate / 100
-                            annualNetCost      = annualDayCost + annualNightCost - annualExportCredit
+                            annualDayCost       = annualDayImport   * tariffs.dayRate        / 100
+                            annualNightCost     = annualNightImport * tariffs.nightRate      / 100
+                            annualStandingCost  = 365                * tariffs.standingCharge / 100
+                            annualExportCredit  = annualExport      * tariffs.exportRate     / 100
+                            annualNetCost       = annualDayCost + annualNightCost + annualStandingCost - annualExportCredit
                         in
                         div []
-                            [ runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualDhwElec annualBatteryKwh
-                            , costCard annualDayImport annualNightImport annualExport annualDayCost annualNightCost annualExportCredit annualNetCost
+                            [ runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualDhwElec annualBatteryCycles
+                            , costCard annualDayImport annualNightImport annualExport annualDayCost annualNightCost annualStandingCost annualExportCredit annualNetCost
                             ]
 
                     Nothing ->
@@ -2384,7 +2421,7 @@ ufhCard model u =
 
 
 runningCard : UFHResults -> Float -> Float -> Float -> Float -> Float -> Float -> Html Msg
-runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualDhwElec annualBatteryKwh =
+runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualDhwElec annualBatteryCycles =
     let
         totalElec = u.annualElecKwh + annualCoolElec + annualHouseholdKwh + annualEvKwh + annualDhwElec
     in
@@ -2405,20 +2442,21 @@ runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annual
         , detailRow "Electricity (EV)"        (String.fromInt (round annualEvKwh))        "kWh/yr"
         , detailRow "Electricity (total)"     (String.fromInt (round totalElec))          "kWh/yr"
         , hr [ style "border" "none", style "border-top" "1px solid #dde3f0", style "margin" "0.4rem 0" ] []
-        , detailRow "Battery throughput" (String.fromInt (round annualBatteryKwh)) "kWh/yr"
+        , detailRow "Battery cycles" (String.fromInt (round annualBatteryCycles)) "/yr"
         ]
 
 
-costCard : Float -> Float -> Float -> Float -> Float -> Float -> Float -> Html Msg
-costCard dayImport nightImport export dayCost nightCost exportCredit netCost =
+costCard : Float -> Float -> Float -> Float -> Float -> Float -> Float -> Float -> Html Msg
+costCard dayImport nightImport export dayCost nightCost standingCost exportCredit netCost =
     card "#f5f7ff" "Annual Cost"
         [ detailRow "Day import"   (String.fromInt (round dayImport))   "kWh/yr"
         , detailRow "Night import" (String.fromInt (round nightImport)) "kWh/yr"
         , detailRow "PV export"    (String.fromInt (round export))      "kWh/yr"
         , hr [ style "border" "none", style "border-top" "1px solid #dde3f0", style "margin" "0.4rem 0" ] []
-        , detailRow "Day cost"      ("£" ++ fmtMoney dayCost)             ""
-        , detailRow "Night cost"    ("£" ++ fmtMoney nightCost)           ""
-        , detailRow "Export credit" ("−£" ++ fmtMoney exportCredit)       ""
+        , detailRow "Day cost"       ("£" ++ fmtMoney dayCost)           ""
+        , detailRow "Night cost"     ("£" ++ fmtMoney nightCost)         ""
+        , detailRow "Standing charge" ("£" ++ fmtMoney standingCost)     ""
+        , detailRow "Export credit"  ("−£" ++ fmtMoney exportCredit)     ""
         , hr [ style "border" "none", style "border-top" "2px solid #1a1a2e", style "margin" "0.6rem 0" ] []
         , div
             [ style "display" "flex"

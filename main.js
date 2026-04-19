@@ -5204,7 +5204,7 @@ var $author$project$Main$Slight = {$: 'Slight'};
 var $author$project$Main$South = {$: 'South'};
 var $author$project$Main$Tile = {$: 'Tile'};
 var $author$project$Main$VaultedRoof = {$: 'VaultedRoof'};
-var $author$project$Main$defaultModel = {ach: '0.5', annualDhwKwh: '2500', batteryKwh: '5', dayRate: '27', emitterDeltaT: '5', evMilesPerYear: '8000', exportRate: '15', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', gValue: '0.6', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', householdElecKwh: '3500', n50: '3', n50Method: $author$project$Main$SAP2012, nightRate: '7', numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, summerTempOut: '28', tempIn: '21', tempOut: '-3', thermalMass: $author$project$Main$MediumMass, totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
+var $author$project$Main$defaultModel = {ach: '0.5', annualDhwKwh: '2500', batteryKwh: '5', dayRate: '27', emitterDeltaT: '5', evMilesPerYear: '8000', exportRate: '15', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', gValue: '0.6', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', householdElecKwh: '3500', n50: '3', n50Method: $author$project$Main$SAP2012, nightRate: '7', numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, standingCharge: '60', summerTempOut: '28', tempIn: '21', tempOut: '-3', thermalMass: $author$project$Main$MediumMass, totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
 var $author$project$Main$Carpet = {$: 'Carpet'};
 var $author$project$Main$Wood = {$: 'Wood'};
 var $elm$core$Basics$round = _Basics_round;
@@ -5523,6 +5523,7 @@ var $author$project$Main$decodeParams = function (floats) {
 				getF,
 				15,
 				$author$project$Main$shelterFactorToF(d.shelterFactor))),
+		standingCharge: A2(getS, 36, d.standingCharge),
 		summerTempOut: A2(getS, 28, d.summerTempOut),
 		tempIn: A2(getS, 16, d.tempIn),
 		tempOut: A2(getS, 17, d.tempOut),
@@ -5607,7 +5608,8 @@ var $author$project$Main$encodeParams = function (m) {
 			$author$project$Main$toF(m.annualDhwKwh),
 			$author$project$Main$toF(m.dayRate),
 			$author$project$Main$toF(m.nightRate),
-			$author$project$Main$toF(m.exportRate)
+			$author$project$Main$toF(m.exportRate),
+			$author$project$Main$toF(m.standingCharge)
 		]);
 };
 var $elm$json$Json$Encode$float = _Json_wrap;
@@ -5801,11 +5803,16 @@ var $author$project$Main$updateField = F2(
 				return _Utils_update(
 					model,
 					{nightRate: v});
-			default:
+			case 'SetExportRate':
 				var v = msg.a;
 				return _Utils_update(
 					model,
 					{exportRate: v});
+			default:
+				var v = msg.a;
+				return _Utils_update(
+					model,
+					{standingCharge: v});
 		}
 	});
 var $author$project$Main$update = F2(
@@ -6042,6 +6049,9 @@ var $author$project$Main$SetNumFloors = function (a) {
 };
 var $author$project$Main$SetRoofU = function (a) {
 	return {$: 'SetRoofU', a: a};
+};
+var $author$project$Main$SetStandingCharge = function (a) {
+	return {$: 'SetStandingCharge', a: a};
 };
 var $author$project$Main$SetSummerTempOut = function (a) {
 	return {$: 'SetSummerTempOut', a: a};
@@ -6867,7 +6877,7 @@ var $author$project$Main$inputsPanel = function (m) {
 					[
 						A6($author$project$Main$inputRow, 'Household baseload', 'kWh/yr', m.householdElecKwh, $author$project$Main$SetHouseholdElecKwh, '0', '100'),
 						A6($author$project$Main$inputRow, 'EV mileage', 'mi/yr', m.evMilesPerYear, $author$project$Main$SetEvMilesPerYear, '0', '500'),
-						A6($author$project$Main$inputRow, 'Home battery', 'kWh', m.batteryKwh, $author$project$Main$SetBatteryKwh, '0', '1')
+						A6($author$project$Main$inputRow, 'Home battery (usable)', 'kWh', m.batteryKwh, $author$project$Main$SetBatteryKwh, '0', '1')
 					])),
 				$author$project$Main$pvSection(m),
 				A2(
@@ -6877,7 +6887,8 @@ var $author$project$Main$inputsPanel = function (m) {
 					[
 						A6($author$project$Main$inputRow, 'Day rate', 'p/kWh', m.dayRate, $author$project$Main$SetDayRate, '0', '1'),
 						A6($author$project$Main$inputRow, 'Night rate', 'p/kWh', m.nightRate, $author$project$Main$SetNightRate, '0', '1'),
-						A6($author$project$Main$inputRow, 'Export rate', 'p/kWh', m.exportRate, $author$project$Main$SetExportRate, '0', '1')
+						A6($author$project$Main$inputRow, 'Export rate', 'p/kWh', m.exportRate, $author$project$Main$SetExportRate, '0', '1'),
+						A6($author$project$Main$inputRow, 'Standing charge', 'p/day', m.standingCharge, $author$project$Main$SetStandingCharge, '0', '5')
 					]))
 			]));
 };
@@ -7369,6 +7380,7 @@ var $elm$core$Basics$min = F2(
 	});
 var $author$project$Main$costForRow = F2(
 	function (t, row) {
+		var standingCost = t.standingCharge / 100;
 		var nightDemand = (((row.nightHpKwh + row.nightCoolKwh) + row.nightHouseholdKwh) + row.nightEvKwh) + row.nightDhwKwh;
 		var nightImport = A2($elm$core$Basics$max, 0, nightDemand - row.batteryNightDischargeKwh) + row.nightChargeFromGridKwh;
 		var nightCost = (nightImport * t.nightRate) / 100;
@@ -7378,7 +7390,7 @@ var $author$project$Main$costForRow = F2(
 		var _export = A2($elm$core$Basics$max, 0, (row.pvKwh - pvUsedByDay) - row.batteryNightDischargeKwh);
 		var exportCredit = (_export * t.exportRate) / 100;
 		var dayCost = (dayImport * t.dayRate) / 100;
-		return {dayCost: dayCost, dayImportKwh: dayImport, exportCredit: exportCredit, exportKwh: _export, netCost: (dayCost + nightCost) - exportCredit, nightCost: nightCost, nightImportKwh: nightImport};
+		return {dayCost: dayCost, dayImportKwh: dayImport, exportCredit: exportCredit, exportKwh: _export, netCost: ((dayCost + nightCost) + standingCost) - exportCredit, nightCost: nightCost, nightImportKwh: nightImport, standingCost: standingCost};
 	});
 var $elm$core$List$minimum = function (list) {
 	if (list.b) {
@@ -8028,6 +8040,7 @@ var $author$project$Main$heatChartSection = function (rows) {
 				A2($author$project$Main$heatChart, rows, maxHeat)
 			]));
 };
+var $author$project$Main$batteryEff = 0.9;
 var $author$project$Main$coolingScop = 3.5;
 var $author$project$Main$coolingSetpoint = 25;
 var $author$project$Main$daylightHours = _List_fromArray(
@@ -8038,6 +8051,7 @@ var $author$project$Main$dhwMonthlyFractions = _List_fromArray(
 	[0.094, 0.086, 0.090, 0.081, 0.078, 0.072, 0.072, 0.072, 0.076, 0.083, 0.086, 0.090]);
 var $author$project$Main$dhwScop = 2.5;
 var $author$project$Main$diurnalSwing = 3;
+var $author$project$Main$evChargeEff = 0.9;
 var $author$project$Main$evWhPerMile = function (avgTempC) {
 	return A3($elm$core$Basics$clamp, 250, 350, 350 - ((avgTempC - 4.5) * (100 / 12)));
 };
@@ -8101,7 +8115,7 @@ var $author$project$Main$monthlyBreakdown = F4(
 					var netElec = (u.scop > 0) ? (netHeat / u.scop) : 0;
 					var freeCoolNight = ((ua * A2($elm$core$Basics$max, 0, coolTarget - nightT)) * nightHours) / 1000;
 					var excessSolarDay = (gain - useful) / days;
-					var evDaily = (milesPerDay * $author$project$Main$evWhPerMile(avgT)) / 1000;
+					var evDaily = ((milesPerDay * $author$project$Main$evWhPerMile(avgT)) / 1000) / $author$project$Main$evChargeEff;
 					var dhwDaily = (annualDhw * dhwF) / ($author$project$Main$dhwScop * days);
 					var dayT = avgT + $author$project$Main$diurnalSwing;
 					var dayHours = dl;
@@ -8122,10 +8136,11 @@ var $author$project$Main$monthlyBreakdown = F4(
 					var pvToDhwDay = A2($elm$core$Basics$min, pvSurplus - pvToEvDay, dhwDaily);
 					var dhwRemaining = dhwDaily - pvToDhwDay;
 					var nightLoadForBattery = (((hpNight + coolNightElec) + householdNight) + evRemaining) + dhwRemaining;
-					var pvToBattery = A2($elm$core$Basics$min, (pvSurplus - pvToEvDay) - pvToDhwDay, batteryKwh);
-					var batteryNightDischarge = A2($elm$core$Basics$min, pvToBattery, nightLoadForBattery);
 					var batteryDayDischarge = A2($elm$core$Basics$min, batteryKwh, dayShortfall);
-					var nightChargeFromGrid = batteryDayDischarge;
+					var nightChargeFromGrid = batteryDayDischarge / $author$project$Main$batteryEff;
+					var batteryChargeCap = batteryKwh / $author$project$Main$batteryEff;
+					var pvToBattery = A2($elm$core$Basics$min, (pvSurplus - pvToEvDay) - pvToDhwDay, batteryChargeCap);
+					var batteryNightDischarge = A2($elm$core$Basics$min, pvToBattery * $author$project$Main$batteryEff, nightLoadForBattery);
 					return {batteryDayDischargeKwh: batteryDayDischarge, batteryNightDischargeKwh: batteryNightDischarge, coolingKwh: coolingDaily, dayCoolKwh: coolDayElec, dayDhwKwh: pvToDhwDay, dayEvKwh: pvToEvDay, dayHouseholdKwh: householdDay, dayHpKwh: hpDay, daysInMonth: days, grossHeatKwh: grossHeat / days, month: name, nightChargeFromGridKwh: nightChargeFromGrid, nightCoolKwh: coolNightElec, nightDhwKwh: dhwRemaining, nightEvKwh: evRemaining, nightHouseholdKwh: householdNight, nightHpKwh: hpNight, pvKwh: pvDaily, solarGainKwh: gain / days, usefulGainKwh: useful / days};
 				}),
 			$author$project$Main$monthNames,
@@ -8155,7 +8170,11 @@ var $author$project$Main$readTariffs = function (m) {
 		nightRate: A2(
 			$elm$core$Maybe$withDefault,
 			0,
-			$elm$core$String$toFloat(m.nightRate))
+			$elm$core$String$toFloat(m.nightRate)),
+		standingCharge: A2(
+			$elm$core$Maybe$withDefault,
+			0,
+			$elm$core$String$toFloat(m.standingCharge))
 	};
 };
 var $author$project$Main$subHeading = function (label) {
@@ -8496,8 +8515,8 @@ var $author$project$Main$coolingCard = function (c) {
 					]))
 			]));
 };
-var $author$project$Main$costCard = F7(
-	function (dayImport, nightImport, _export, dayCost, nightCost, exportCredit, netCost) {
+var $author$project$Main$costCard = F8(
+	function (dayImport, nightImport, _export, dayCost, nightCost, standingCost, exportCredit, netCost) {
 		return A3(
 			$author$project$Main$card,
 			'#f5f7ff',
@@ -8540,6 +8559,11 @@ var $author$project$Main$costCard = F7(
 					$author$project$Main$detailRow,
 					'Night cost',
 					'£' + $author$project$Main$fmtMoney(nightCost),
+					''),
+					A3(
+					$author$project$Main$detailRow,
+					'Standing charge',
+					'£' + $author$project$Main$fmtMoney(standingCost),
 					''),
 					A3(
 					$author$project$Main$detailRow,
@@ -8933,7 +8957,7 @@ var $author$project$Main$pvCard = F2(
 				]));
 	});
 var $author$project$Main$runningCard = F7(
-	function (u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh, annualDhwElec, annualBatteryKwh) {
+	function (u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh, annualDhwElec, annualBatteryCycles) {
 		var totalElec = (((u.annualElecKwh + annualCoolElec) + annualHouseholdKwh) + annualEvKwh) + annualDhwElec;
 		return A3(
 			$author$project$Main$card,
@@ -9033,10 +9057,10 @@ var $author$project$Main$runningCard = F7(
 					_List_Nil),
 					A3(
 					$author$project$Main$detailRow,
-					'Battery throughput',
+					'Battery cycles',
 					$elm$core$String$fromInt(
-						$elm$core$Basics$round(annualBatteryKwh)),
-					'kWh/yr')
+						$elm$core$Basics$round(annualBatteryCycles)),
+					'/yr')
 				]));
 	});
 var $author$project$Main$ufhCard = F2(
@@ -9215,6 +9239,11 @@ var $author$project$Main$resultsPanel = F2(
 										A2($author$project$Main$costForRow, tariffs, row));
 								},
 								rows);
+							var batteryCapacity = A2(
+								$elm$core$Maybe$withDefault,
+								0,
+								$elm$core$String$toFloat(model.batteryKwh));
+							var annualStandingCost = (365 * tariffs.standingCharge) / 100;
 							var annualNightImport = $elm$core$List$sum(
 								A2(
 									$elm$core$List$map,
@@ -9257,7 +9286,7 @@ var $author$project$Main$resultsPanel = F2(
 									},
 									costRows));
 							var annualDayCost = (annualDayImport * tariffs.dayRate) / 100;
-							var annualNetCost = (annualDayCost + annualNightCost) - annualExportCredit;
+							var annualNetCost = ((annualDayCost + annualNightCost) + annualStandingCost) - annualExportCredit;
 							var annualCoolKwh = sumOver(
 								function ($) {
 									return $.coolingKwh;
@@ -9270,13 +9299,14 @@ var $author$project$Main$resultsPanel = F2(
 								function (row) {
 									return row.batteryDayDischargeKwh + row.batteryNightDischargeKwh;
 								});
+							var annualBatteryCycles = (batteryCapacity > 0) ? (annualBatteryKwh / batteryCapacity) : 0;
 							return A2(
 								$elm$html$Html$div,
 								_List_Nil,
 								_List_fromArray(
 									[
-										A7($author$project$Main$runningCard, u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh, annualDhwElec, annualBatteryKwh),
-										A7($author$project$Main$costCard, annualDayImport, annualNightImport, annualExport, annualDayCost, annualNightCost, annualExportCredit, annualNetCost)
+										A7($author$project$Main$runningCard, u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh, annualDhwElec, annualBatteryCycles),
+										A8($author$project$Main$costCard, annualDayImport, annualNightImport, annualExport, annualDayCost, annualNightCost, annualStandingCost, annualExportCredit, annualNetCost)
 									]));
 						} else {
 							return $elm$html$Html$text('');
@@ -9320,7 +9350,7 @@ var $author$project$Main$view = function (model) {
 					]),
 				_List_fromArray(
 					[
-						$elm$html$Html$text('Heat Loss Calculator')
+						$elm$html$Html$text('Home Energy & Cost Modeller')
 					])),
 				A2(
 				$elm$html$Html$p,
@@ -9332,7 +9362,7 @@ var $author$project$Main$view = function (model) {
 					]),
 				_List_fromArray(
 					[
-						$elm$html$Html$text('Fabric + ventilation heat loss. Assumes square floor plan.')
+						$elm$html$Html$text('Heat loss, cooling, heat pump, hot water, PV, battery, EV and tariffs. Assumes square floor plan.')
 					])),
 				A2(
 				$elm$html$Html$div,
