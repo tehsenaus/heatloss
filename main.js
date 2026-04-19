@@ -7247,6 +7247,9 @@ var $author$project$Main$chartLegend = A2(
 		[
 			A2($author$project$Main$legendSwatch, '#2e7d32', 'PV'),
 			A2($author$project$Main$legendSwatch, '#d4a017', 'Battery'),
+			A2($author$project$Main$legendSwatch, '#c23b3b', 'Grid import'),
+			A2($author$project$Main$legendSwatch, '#6fa96f', 'Grid export'),
+			A2($author$project$Main$legendSwatch, '#cccccc', 'Curtailed'),
 			A2($author$project$Main$legendSwatch, '#c77700', 'HP heating'),
 			A2($author$project$Main$legendSwatch, '#b05577', 'HP hot water'),
 			A2($author$project$Main$legendSwatch, '#3b82c4', 'HP cooling'),
@@ -7456,16 +7459,10 @@ var $author$project$Main$coolingChartSection = function (rows) {
 var $author$project$Main$costForRow = F2(
 	function (t, row) {
 		var standingCost = t.standingCharge / 100;
-		var nightDemand = (((row.nightHpKwh + row.nightCoolKwh) + row.nightHouseholdKwh) + row.nightEvKwh) + row.nightDhwKwh;
-		var nightImport = A2($elm$core$Basics$max, 0, nightDemand - row.batteryNightDischargeKwh) + row.nightChargeFromGridKwh;
-		var nightCost = (nightImport * t.nightRate) / 100;
-		var dayDemand = (((row.dayHpKwh + row.dayCoolKwh) + row.dayHouseholdKwh) + row.dayEvKwh) + row.dayDhwKwh;
-		var pvUsedByDay = A2($elm$core$Basics$min, row.pvKwh, dayDemand);
-		var dayImport = A2($elm$core$Basics$max, 0, (dayDemand - pvUsedByDay) - row.batteryDayDischargeKwh);
-		var _export = A2($elm$core$Basics$max, 0, (row.pvKwh - pvUsedByDay) - row.batteryNightDischargeKwh);
-		var exportCredit = (_export * t.exportRate) / 100;
-		var dayCost = (dayImport * t.dayRate) / 100;
-		return {dayCost: dayCost, dayImportKwh: dayImport, exportCredit: exportCredit, exportKwh: _export, netCost: ((dayCost + nightCost) + standingCost) - exportCredit, nightCost: nightCost, nightImportKwh: nightImport, standingCost: standingCost};
+		var nightCost = (row.nightImportKwh * t.nightRate) / 100;
+		var exportCredit = (row.exportKwh * t.exportRate) / 100;
+		var dayCost = (row.dayImportKwh * t.dayRate) / 100;
+		return {dayCost: dayCost, dayImportKwh: row.dayImportKwh, exportCredit: exportCredit, exportKwh: row.exportKwh, netCost: ((dayCost + nightCost) + standingCost) - exportCredit, nightCost: nightCost, nightImportKwh: row.nightImportKwh, standingCost: standingCost};
 	});
 var $elm$core$List$minimum = function (list) {
 	if (list.b) {
@@ -7727,7 +7724,8 @@ var $author$project$Main$dayNightChart = F3(
 				_List_fromArray(
 					[
 						_Utils_Tuple2(row.pvKwh, '#2e7d32'),
-						_Utils_Tuple2(row.batteryDayDischargeKwh, '#d4a017')
+						_Utils_Tuple2(row.batteryDayDischargeKwh, '#d4a017'),
+						_Utils_Tuple2(row.dayImportKwh, '#c23b3b')
 					]),
 				_List_fromArray(
 					[
@@ -7736,11 +7734,14 @@ var $author$project$Main$dayNightChart = F3(
 						_Utils_Tuple2(row.dayCoolKwh, '#3b82c4'),
 						_Utils_Tuple2(row.dayHouseholdKwh, '#888888'),
 						_Utils_Tuple2(row.dayEvKwh, '#444466'),
-						_Utils_Tuple2(row.batteryDayChargeFromPvKwh, '#d4a017')
+						_Utils_Tuple2(row.batteryDayChargeFromPvKwh, '#d4a017'),
+						_Utils_Tuple2(row.exportKwh, '#6fa96f'),
+						_Utils_Tuple2(row.curtailedKwh, '#cccccc')
 					])) : _Utils_Tuple2(
 				_List_fromArray(
 					[
-						_Utils_Tuple2(row.batteryNightDischargeKwh, '#d4a017')
+						_Utils_Tuple2(row.batteryNightDischargeKwh, '#d4a017'),
+						_Utils_Tuple2(row.nightImportKwh, '#c23b3b')
 					]),
 				_List_fromArray(
 					[
@@ -8129,6 +8130,7 @@ var $author$project$Main$evChargeEff = 0.9;
 var $author$project$Main$evWhPerMile = function (avgTempC) {
 	return A3($elm$core$Basics$clamp, 250, 350, 350 - ((avgTempC - 4.5) * (100 / 12)));
 };
+var $author$project$Main$exportLimitKw = 3.68;
 var $author$project$Main$internalGainDayFrac = 0.6;
 var $elm$core$List$map5 = _List_map5;
 var $author$project$Main$monthNames = _List_fromArray(
@@ -8191,6 +8193,7 @@ var $author$project$Main$monthlyBreakdown = F4(
 					var netElec = (u.scop > 0) ? (netHeat / u.scop) : 0;
 					var totalExcess = A2($elm$core$Basics$max, 0, gain - useful);
 					var freeCoolNight = ((ua * A2($elm$core$Basics$max, 0, coolTarget - nightT)) * nightHours) / 1000;
+					var exportCapDaily = $author$project$Main$exportLimitKw * dl;
 					var excessSolarDay = (totalExcess * solarShare) / days;
 					var evDaily = ((milesPerDay * $author$project$Main$evWhPerMile(avgT)) / 1000) / $author$project$Main$evChargeEff;
 					var dhwDaily = (annualDhw * dhwF) / ($author$project$Main$dhwScop * days);
@@ -8213,22 +8216,31 @@ var $author$project$Main$monthlyBreakdown = F4(
 					var pvToDhwDay = A2($elm$core$Basics$min, pvSurplus - pvToEvDay, dhwDaily);
 					var dhwRemaining = dhwDaily - pvToDhwDay;
 					var nightLoadForBattery = (((hpNight + coolNightElec) + householdNight) + evRemaining) + dhwRemaining;
+					var nightLoadTotal = (((hpNight + coolNightElec) + householdNight) + evRemaining) + dhwRemaining;
 					var batteryDayDischarge = A2($elm$core$Basics$min, batteryKwh, dayShortfall);
+					var dayImportKwh = A2($elm$core$Basics$max, 0, (dayLoad - pvDaily) - batteryDayDischarge);
 					var nightChargeFromGrid = batteryDayDischarge / $author$project$Main$batteryEff;
 					var batteryChargeCap = A2($elm$core$Basics$min, batteryKwh, nightLoadForBattery) / $author$project$Main$batteryEff;
 					var pvToBattery = A2($elm$core$Basics$min, (pvSurplus - pvToEvDay) - pvToDhwDay, batteryChargeCap);
 					var batteryNightDischarge = pvToBattery * $author$project$Main$batteryEff;
+					var nightImportKwh = A2($elm$core$Basics$max, 0, nightLoadTotal - batteryNightDischarge) + nightChargeFromGrid;
+					var exportAvailable = A2($elm$core$Basics$max, 0, ((pvSurplus - pvToEvDay) - pvToDhwDay) - pvToBattery);
+					var exportKwh = A2($elm$core$Basics$min, exportAvailable, exportCapDaily);
+					var curtailedKwh = exportAvailable - exportKwh;
 					return {
 						batteryDayChargeFromPvKwh: pvToBattery,
 						batteryDayDischargeKwh: batteryDayDischarge,
 						batteryNightDischargeKwh: batteryNightDischarge,
 						coolingKwh: coolingDaily,
+						curtailedKwh: curtailedKwh,
 						dayCoolKwh: coolDayElec,
 						dayDhwKwh: pvToDhwDay,
 						dayEvKwh: pvToEvDay,
 						dayHouseholdKwh: householdDay,
 						dayHpKwh: hpDay,
+						dayImportKwh: dayImportKwh,
 						daysInMonth: days,
+						exportKwh: exportKwh,
 						grossHeatKwh: A2($elm$core$Basics$max, 0, grossHeat - internalGain) / days,
 						month: name,
 						nightChargeFromGridKwh: nightChargeFromGrid,
@@ -8237,6 +8249,7 @@ var $author$project$Main$monthlyBreakdown = F4(
 						nightEvKwh: evRemaining,
 						nightHouseholdKwh: householdNight,
 						nightHpKwh: hpNight,
+						nightImportKwh: nightImportKwh,
 						pvKwh: pvDaily,
 						solarGainKwh: solarGain / days,
 						usefulGainKwh: A3($elm$core$Basics$clamp, 0, solarGain, useful - internalGain) / days
@@ -8320,16 +8333,16 @@ var $author$project$Main$monthlyChartSection = F2(
 			var rows = A4($author$project$Main$monthlyBreakdown, model, r, u, pv);
 			var maxVal = function () {
 				var nightSupply = function (m) {
-					return m.batteryNightDischargeKwh;
+					return m.batteryNightDischargeKwh + m.nightImportKwh;
 				};
 				var nightD = function (m) {
 					return ((((m.nightHpKwh + m.nightCoolKwh) + m.nightHouseholdKwh) + m.nightEvKwh) + m.nightDhwKwh) + m.nightChargeFromGridKwh;
 				};
 				var daySupply = function (m) {
-					return m.pvKwh + m.batteryDayDischargeKwh;
+					return (m.pvKwh + m.batteryDayDischargeKwh) + m.dayImportKwh;
 				};
 				var dayD = function (m) {
-					return ((((m.dayHpKwh + m.dayDhwKwh) + m.dayCoolKwh) + m.dayHouseholdKwh) + m.dayEvKwh) + m.batteryDayChargeFromPvKwh;
+					return ((((((m.dayHpKwh + m.dayDhwKwh) + m.dayCoolKwh) + m.dayHouseholdKwh) + m.dayEvKwh) + m.batteryDayChargeFromPvKwh) + m.exportKwh) + m.curtailedKwh;
 				};
 				return A2(
 					$elm$core$Maybe$withDefault,
@@ -9540,6 +9553,13 @@ var $author$project$Main$ukAssumptionsBox = A2(
 					_List_fromArray(
 						[
 							$elm$html$Html$text('Tariff model: flat day/night rates + export tariff + daily standing charge (no Agile/Flux time-of-use pricing).')
+						])),
+					A2(
+					$elm$html$Html$li,
+					_List_Nil,
+					_List_fromArray(
+						[
+							$elm$html$Html$text('Grid export capped at 3.68 kW (UK G98 single-phase limit); PV generated above this during daylight is curtailed.')
 						])),
 					A2(
 					$elm$html$Html$li,

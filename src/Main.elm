@@ -716,6 +716,14 @@ evChargeEff =
     0.9
 
 
+-- Grid export limit (kW). UK G98 notification allows single-phase export up
+-- to 3.68 kW without DNO approval; beyond this the inverter curtails.
+-- Oversized arrays therefore lose summer generation at the midday peak.
+exportLimitKw : Float
+exportLimitKw =
+    3.68
+
+
 -- Monthly DHW demand shape (normalised, sums to 1.0). Slight winter
 -- bias reflects colder incoming mains water (~5°C Jan vs ~15°C Jul)
 -- which increases kWh-per-litre delivered at a fixed setpoint.
@@ -1177,6 +1185,10 @@ type alias MonthlyRow =
     , batteryNightDischargeKwh : Float
     , batteryDayChargeFromPvKwh : Float
     , nightChargeFromGridKwh   : Float
+    , exportKwh                : Float
+    , curtailedKwh             : Float
+    , dayImportKwh             : Float
+    , nightImportKwh           : Float
     , daysInMonth              : Float
     }
 
@@ -1370,6 +1382,21 @@ monthlyBreakdown m r u pv =
                 batteryNightDischarge = pvToBattery * batteryEff
                 batteryDayDischarge   = Basics.min batteryKwh dayShortfall
                 nightChargeFromGrid   = batteryDayDischarge / batteryEff
+
+                -- Leftover PV after the direct-use cascade. Capped by the
+                -- inverter's G98 export limit; anything above is curtailed
+                -- (no export credit, no load to absorb it).
+                exportAvailable = Basics.max 0 (pvSurplus - pvToEvDay - pvToDhwDay - pvToBattery)
+                exportCapDaily  = exportLimitKw * dl
+                exportKwh       = Basics.min exportAvailable exportCapDaily
+                curtailedKwh    = exportAvailable - exportKwh
+
+                -- Grid import = day shortfall left after battery cover,
+                -- plus night load left after PV-stored battery, plus the
+                -- off-peak battery top-up for winter days.
+                dayImportKwh   = Basics.max 0 (dayLoad - pvDaily - batteryDayDischarge)
+                nightLoadTotal = hpNight + coolNightElec + householdNight + evRemaining + dhwRemaining
+                nightImportKwh = Basics.max 0 (nightLoadTotal - batteryNightDischarge) + nightChargeFromGrid
             in
             { month            = name
             , pvKwh            = pvDaily
@@ -1391,6 +1418,10 @@ monthlyBreakdown m r u pv =
             , batteryNightDischargeKwh = batteryNightDischarge
             , batteryDayChargeFromPvKwh = pvToBattery
             , nightChargeFromGridKwh   = nightChargeFromGrid
+            , exportKwh                = exportKwh
+            , curtailedKwh             = curtailedKwh
+            , dayImportKwh             = dayImportKwh
+            , nightImportKwh           = nightImportKwh
             , daysInMonth              = days
             }
         )
@@ -1440,36 +1471,14 @@ type alias CostRow =
 costForRow : Tariffs -> MonthlyRow -> CostRow
 costForRow t row =
     let
-        dayDemand =
-            row.dayHpKwh + row.dayCoolKwh + row.dayHouseholdKwh + row.dayEvKwh + row.dayDhwKwh
-
-        nightDemand =
-            row.nightHpKwh + row.nightCoolKwh + row.nightHouseholdKwh + row.nightEvKwh + row.nightDhwKwh
-
-        -- PV first meets day demand; any surplus is stored (equals
-        -- batteryNightDischargeKwh since the battery cycles daily);
-        -- anything left over is exported.
-        pvUsedByDay = Basics.min row.pvKwh dayDemand
-
-        dayImport =
-            Basics.max 0 (dayDemand - pvUsedByDay - row.batteryDayDischargeKwh)
-
-        -- Night supply is battery discharge (PV-stored). Off-peak grid
-        -- charging of the battery shows up as nightChargeFromGridKwh.
-        nightImport =
-            Basics.max 0 (nightDemand - row.batteryNightDischargeKwh) + row.nightChargeFromGridKwh
-
-        export =
-            Basics.max 0 (row.pvKwh - pvUsedByDay - row.batteryNightDischargeKwh)
-
-        dayCost      = dayImport   * t.dayRate        / 100
-        nightCost    = nightImport * t.nightRate      / 100
-        standingCost =               t.standingCharge / 100
-        exportCredit = export      * t.exportRate     / 100
+        dayCost      = row.dayImportKwh   * t.dayRate        / 100
+        nightCost    = row.nightImportKwh * t.nightRate      / 100
+        standingCost =                      t.standingCharge / 100
+        exportCredit = row.exportKwh      * t.exportRate     / 100
     in
-    { dayImportKwh   = dayImport
-    , nightImportKwh = nightImport
-    , exportKwh      = export
+    { dayImportKwh   = row.dayImportKwh
+    , nightImportKwh = row.nightImportKwh
+    , exportKwh      = row.exportKwh
     , dayCost        = dayCost
     , nightCost      = nightCost
     , standingCost   = standingCost
@@ -1529,9 +1538,9 @@ monthlyChartSection model maybeR =
                 tariffs = readTariffs model
                 maxVal =
                     let
-                        daySupply m = m.pvKwh + m.batteryDayDischargeKwh
-                        dayD m = m.dayHpKwh + m.dayDhwKwh + m.dayCoolKwh + m.dayHouseholdKwh + m.dayEvKwh + m.batteryDayChargeFromPvKwh
-                        nightSupply m = m.batteryNightDischargeKwh
+                        daySupply m = m.pvKwh + m.batteryDayDischargeKwh + m.dayImportKwh
+                        dayD m = m.dayHpKwh + m.dayDhwKwh + m.dayCoolKwh + m.dayHouseholdKwh + m.dayEvKwh + m.batteryDayChargeFromPvKwh + m.exportKwh + m.curtailedKwh
+                        nightSupply m = m.batteryNightDischargeKwh + m.nightImportKwh
                         nightD m = m.nightHpKwh + m.nightCoolKwh + m.nightHouseholdKwh + m.nightEvKwh + m.nightDhwKwh + m.nightChargeFromGridKwh
                     in
                     rows
@@ -1584,6 +1593,7 @@ ukAssumptionsBox =
             , li [] [ text "Battery round-trip efficiency 90%; EV charging efficiency 90%." ]
             , li [] [ text "EV energy use: 250 Wh/mi at 16.5 °C avg, 350 Wh/mi at 4.5 °C avg (linear)." ]
             , li [] [ text "Tariff model: flat day/night rates + export tariff + daily standing charge (no Agile/Flux time-of-use pricing)." ]
+            , li [] [ text "Grid export capped at 3.68 kW (UK G98 single-phase limit); PV generated above this during daylight is curtailed." ]
             , li [] [ text "Battery dispatch: single daily cycle; direct-from-PV priority is day load → EV → DHW → battery. In months with no PV surplus, battery is charged overnight off-peak and discharged in the day." ]
             ]
         ]
@@ -1932,6 +1942,9 @@ chartLegend =
         ]
         [ legendSwatch "#2e7d32" "PV"
         , legendSwatch "#d4a017" "Battery"
+        , legendSwatch "#c23b3b" "Grid import"
+        , legendSwatch "#6fa96f" "Grid export"
+        , legendSwatch "#cccccc" "Curtailed"
         , legendSwatch "#c77700" "HP heating"
         , legendSwatch "#b05577" "HP hot water"
         , legendSwatch "#3b82c4" "HP cooling"
@@ -1984,8 +1997,9 @@ dayNightChart rows maxVal isDay =
 
         supplyAndDemand row =
             if isDay then
-                ( [ ( row.pvKwh, "#2e7d32" )
-                  , ( row.batteryDayDischargeKwh, "#d4a017" )
+                ( [ ( row.pvKwh,                   "#2e7d32" )
+                  , ( row.batteryDayDischargeKwh,  "#d4a017" )
+                  , ( row.dayImportKwh,            "#c23b3b" )
                   ]
                 , [ ( row.dayHpKwh,                "#c77700" )
                   , ( row.dayDhwKwh,               "#b05577" )
@@ -1993,11 +2007,14 @@ dayNightChart rows maxVal isDay =
                   , ( row.dayHouseholdKwh,         "#888888" )
                   , ( row.dayEvKwh,                "#444466" )
                   , ( row.batteryDayChargeFromPvKwh, "#d4a017" )
+                  , ( row.exportKwh,               "#6fa96f" )
+                  , ( row.curtailedKwh,            "#cccccc" )
                   ]
                 )
 
             else
                 ( [ ( row.batteryNightDischargeKwh, "#d4a017" )
+                  , ( row.nightImportKwh,           "#c23b3b" )
                   ]
                 , [ ( row.nightHpKwh,            "#c77700" )
                   , ( row.nightDhwKwh,           "#b05577" )
