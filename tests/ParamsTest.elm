@@ -132,6 +132,7 @@ suite =
                         , householdElecKwh = "3500"
                         , evMilesPerYear = "8000"
                         , batteryKwh = "5"
+                        , annualDhwKwh = "2500"
                         }
                 in
                 decodeParams pinned

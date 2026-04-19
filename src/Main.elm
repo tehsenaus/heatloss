@@ -235,6 +235,7 @@ type alias Model =
     , householdElecKwh : String
     , evMilesPerYear : String
     , batteryKwh : String
+    , annualDhwKwh : String
     }
 
 
@@ -295,6 +296,7 @@ defaultModel =
     , householdElecKwh = "3500"
     , evMilesPerYear = "8000"
     , batteryKwh = "5"
+    , annualDhwKwh = "2500"
     }
 
 
@@ -454,6 +456,7 @@ encodeParams m =
     , toF m.householdElecKwh
     , toF m.evMilesPerYear
     , toF m.batteryKwh
+    , toF m.annualDhwKwh
     ]
 
 
@@ -504,6 +507,7 @@ decodeParams floats =
     , householdElecKwh = getS 29 d.householdElecKwh
     , evMilesPerYear  = getS 30 d.evMilesPerYear
     , batteryKwh      = getS 31 d.batteryKwh
+    , annualDhwKwh    = getS 32 d.annualDhwKwh
     }
 
 
@@ -544,6 +548,7 @@ type Msg
     | SetHouseholdElecKwh String
     | SetEvMilesPerYear String
     | SetBatteryKwh String
+    | SetAnnualDhwKwh String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -590,6 +595,7 @@ updateField msg model =
         SetHouseholdElecKwh v -> { model | householdElecKwh = v }
         SetEvMilesPerYear v -> { model | evMilesPerYear = v }
         SetBatteryKwh v     -> { model | batteryKwh = v }
+        SetAnnualDhwKwh v   -> { model | annualDhwKwh = v }
 
 
 
@@ -662,6 +668,22 @@ diurnalSwing =
 coolingScop : Float
 coolingScop =
     3.5
+
+
+-- Domestic hot water heating by ASHP. DHW needs ~50–55°C flow, well
+-- above space-heating flow temps, so SCOP is lower. UK field data puts
+-- DHW SCOP around 2.2–2.8 depending on cylinder/controls; we use 2.5.
+dhwScop : Float
+dhwScop =
+    2.5
+
+
+-- Monthly DHW demand shape (normalised, sums to 1.0). Slight winter
+-- bias reflects colder incoming mains water (~5°C Jan vs ~15°C Jul)
+-- which increases kWh-per-litre delivered at a fixed setpoint.
+dhwMonthlyFractions : List Float
+dhwMonthlyFractions =
+    [ 0.094, 0.086, 0.090, 0.081, 0.078, 0.072, 0.072, 0.072, 0.076, 0.083, 0.086, 0.090 ]
 
 
 -- EV efficiency (Wh/mile) by monthly avg outdoor temp. Cold weather hurts
@@ -1067,21 +1089,22 @@ type alias MonthlyRow =
     , dayCoolKwh       : Float
     , dayHouseholdKwh  : Float
     , dayEvKwh         : Float
+    , dayDhwKwh        : Float
     -- Night demand stack (kWh/day)
     , nightHpKwh       : Float
     , nightCoolKwh     : Float
     , nightHouseholdKwh : Float
     , nightEvKwh       : Float
-    -- Battery throughput (kWh/day). One of these is non-zero per month:
-    --   batteryDischargeKwh = battery → load (PV-stored discharged at
-    --     night in summer, OR off-peak grid-stored discharged in day in
-    --     winter — same magnitude, different direction).
-    --   nightChargeFromGridKwh = grid → battery overnight (winter only),
-    --     stacked into night demand to reflect actual grid import.
-    , batteryDischargeKwh    : Float
-    , nightChargeFromGridKwh : Float
-    , winterMode             : Bool
-    , daysInMonth            : Float
+    , nightDhwKwh      : Float
+    -- Battery throughput (kWh/day). Day-discharge and night-discharge
+    -- are mutually exclusive per month: if there's PV surplus we store
+    -- it and discharge at night; if there's a day shortfall we charge
+    -- overnight from off-peak grid and discharge during the day. Both
+    -- fall out of the same cascade — no mode flag.
+    , batteryDayDischargeKwh   : Float
+    , batteryNightDischargeKwh : Float
+    , nightChargeFromGridKwh   : Float
+    , daysInMonth              : Float
     }
 
 
@@ -1142,9 +1165,13 @@ monthlyBreakdown m r u pv =
         milesPerDay     = annualEvMiles / 365
 
         batteryKwh = String.toFloat m.batteryKwh |> Maybe.withDefault 0
+
+        -- DHW: annual thermal demand × monthly fraction ÷ dhwScop = kWh elec.
+        -- Assumed scheduled overnight (off-peak) — common UK HP setup.
+        annualDhw = String.toFloat m.annualDhwKwh |> Maybe.withDefault 0
     in
     List.map5
-        (\name ( hddF, pvF ) dl days avgT ->
+        (\name ( hddF, pvF, dhwF ) dl days avgT ->
             let
                 grossHeat = u.annualHeatKwh * hddF
                 gain      = u.annualSolarGain * pvF
@@ -1202,47 +1229,35 @@ monthlyBreakdown m r u pv =
                 -- EV daily kWh.
                 evDaily = milesPerDay * evWhPerMile avgT / 1000
 
+                -- DHW electricity per day (this month).
+                dhwDaily = (annualDhw * dhwF) / (dhwScop * days)
+
                 pvDaily = pv.annualKwh * pvF / days
                 dayLoad = hpDay + coolDayElec + householdDay
 
-                -- Mode switch: if there's no daytime PV surplus to store,
-                -- assume the user is on a winter strategy — charge the
-                -- battery overnight on cheap off-peak rates and discharge
-                -- it during the day. (And the EV always charges overnight
-                -- in winter since there's no surplus to use during the day.)
-                winterMode = pvDaily <= dayLoad
+                -- Single cascade: any PV surplus after day load flows
+                -- EV → DHW → battery (direct-from-PV avoids round-trip
+                -- losses). Any day shortfall is covered by the battery,
+                -- which must have been charged overnight from off-peak
+                -- grid. The two cases are mutually exclusive per month
+                -- (surplus OR shortfall), so no mode flag is needed —
+                -- both quantities fall out as zero in the other regime.
+                pvSurplus    = Basics.max 0 (pvDaily - dayLoad)
+                dayShortfall = Basics.max 0 (dayLoad - pvDaily)
 
-                ( pvToEvDay, batteryDischarge, nightChargeFromGrid ) =
-                    if winterMode then
-                        let
-                            dayShortfall = dayLoad - pvDaily
-                            batToDay     = Basics.min batteryKwh dayShortfall
-                        in
-                        -- EV charges overnight (no surplus to use), battery
-                        -- charges overnight from grid by the amount it
-                        -- will discharge during the day.
-                        ( 0, batToDay, batToDay )
+                pvToEvDay        = Basics.min pvSurplus evDaily
+                pvToDhwDay       = Basics.min (pvSurplus - pvToEvDay) dhwDaily
+                pvToBattery      = Basics.min (pvSurplus - pvToEvDay - pvToDhwDay) batteryKwh
 
-                    else
-                        -- Summer-style: day load → EV (direct) → battery.
-                        -- Battery discharges to night load.
-                        let
-                            surplusAfterLoad = pvDaily - dayLoad
-                            toEv             = Basics.min surplusAfterLoad evDaily
-                            surplusAfterEv   = surplusAfterLoad - toEv
-                            toBattery        = Basics.min surplusAfterEv batteryKwh
+                evRemaining  = evDaily - pvToEvDay
+                dhwRemaining = dhwDaily - pvToDhwDay
 
-                            evNight =
-                                evDaily - toEv
+                nightLoadForBattery =
+                    hpNight + coolNightElec + householdNight + evRemaining + dhwRemaining
 
-                            nightLoadForBattery =
-                                hpNight + coolNightElec + householdNight + evNight
-
-                            batToNight = Basics.min toBattery nightLoadForBattery
-                        in
-                        ( toEv, batToNight, 0 )
-
-                evRemaining = evDaily - pvToEvDay
+                batteryNightDischarge = Basics.min pvToBattery nightLoadForBattery
+                batteryDayDischarge   = Basics.min batteryKwh dayShortfall
+                nightChargeFromGrid   = batteryDayDischarge
             in
             { month            = name
             , pvKwh            = pvDaily
@@ -1254,18 +1269,20 @@ monthlyBreakdown m r u pv =
             , dayCoolKwh       = coolDayElec
             , dayHouseholdKwh  = householdDay
             , dayEvKwh         = pvToEvDay
+            , dayDhwKwh        = pvToDhwDay
             , nightHpKwh       = hpNight
             , nightCoolKwh     = coolNightElec
             , nightHouseholdKwh = householdNight
             , nightEvKwh       = evRemaining
-            , batteryDischargeKwh    = batteryDischarge
-            , nightChargeFromGridKwh = nightChargeFromGrid
-            , winterMode             = winterMode
-            , daysInMonth            = days
+            , nightDhwKwh      = dhwRemaining
+            , batteryDayDischargeKwh   = batteryDayDischarge
+            , batteryNightDischargeKwh = batteryNightDischarge
+            , nightChargeFromGridKwh   = nightChargeFromGrid
+            , daysInMonth              = days
             }
         )
         monthNames
-        (List.map2 Tuple.pair hddFractions pvFractions)
+        (List.map3 (\a b c -> ( a, b, c )) hddFractions pvFractions dhwMonthlyFractions)
         daylightHours
         daysInMonth
         monthlyAvgTempC
@@ -1320,10 +1337,10 @@ monthlyChartSection model maybeR =
                 rows = monthlyBreakdown model r u pv
                 maxVal =
                     let
-                        daySupply m = m.pvKwh + (if m.winterMode then m.batteryDischargeKwh else 0)
-                        dayD m = m.dayHpKwh + m.dayCoolKwh + m.dayHouseholdKwh + m.dayEvKwh
-                        nightSupply m = if m.winterMode then 0 else m.batteryDischargeKwh
-                        nightD m = m.nightHpKwh + m.nightCoolKwh + m.nightHouseholdKwh + m.nightEvKwh + m.nightChargeFromGridKwh
+                        daySupply m = m.pvKwh + m.batteryDayDischargeKwh
+                        dayD m = m.dayHpKwh + m.dayDhwKwh + m.dayCoolKwh + m.dayHouseholdKwh + m.dayEvKwh
+                        nightSupply m = m.batteryNightDischargeKwh
+                        nightD m = m.nightHpKwh + m.nightCoolKwh + m.nightHouseholdKwh + m.nightEvKwh + m.nightDhwKwh + m.nightChargeFromGridKwh
                     in
                     rows
                         |> List.map (\m -> List.maximum [ daySupply m, dayD m, nightSupply m, nightD m ] |> Maybe.withDefault 0)
@@ -1570,6 +1587,7 @@ chartLegend =
         , legendSwatch "#d4a017" "Battery (summer: night discharge / winter: off-peak charge)"
         , legendSwatch "#c77700" "HP heating (day)"
         , legendSwatch "#6a4b8a" "HP heating (night)"
+        , legendSwatch "#b05577" "HP hot water"
         , legendSwatch "#3b82c4" "HP cooling"
         , legendSwatch "#888888" "Household"
         , legendSwatch "#444466" "EV"
@@ -1621,9 +1639,10 @@ dayNightChart rows maxVal isDay =
         supplyAndDemand row =
             if isDay then
                 ( [ ( row.pvKwh, "#2e7d32" )
-                  , ( if row.winterMode then row.batteryDischargeKwh else 0, "#d4a017" )
+                  , ( row.batteryDayDischargeKwh, "#d4a017" )
                   ]
                 , [ ( row.dayHpKwh,        "#c77700" )
+                  , ( row.dayDhwKwh,       "#b05577" )
                   , ( row.dayCoolKwh,      "#3b82c4" )
                   , ( row.dayHouseholdKwh, "#888888" )
                   , ( row.dayEvKwh,        "#444466" )
@@ -1631,9 +1650,10 @@ dayNightChart rows maxVal isDay =
                 )
 
             else
-                ( [ ( if row.winterMode then 0 else row.batteryDischargeKwh, "#d4a017" )
+                ( [ ( row.batteryNightDischargeKwh, "#d4a017" )
                   ]
                 , [ ( row.nightHpKwh,            "#6a4b8a" )
+                  , ( row.nightDhwKwh,           "#b05577" )
                   , ( row.nightCoolKwh,          "#3b82c4" )
                   , ( row.nightHouseholdKwh,     "#888888" )
                   , ( row.nightEvKwh,            "#444466" )
@@ -1719,6 +1739,7 @@ inputsPanel m =
         , ufhSection m
         , inputSection "Annual Energy"
             [ inputRow "Heating degree days" "°C·d" m.hdd SetHDD "0" "50"
+            , inputRow "Hot water demand" "kWh/yr" m.annualDhwKwh SetAnnualDhwKwh "0" "100"
             ]
         , inputSection "Other Electricity"
             [ inputRow "Household baseload" "kWh/yr" m.householdElecKwh SetHouseholdElecKwh "0" "100"
@@ -2020,9 +2041,10 @@ resultsPanel model maybeR =
                             annualCoolElec  = sumOver (\row -> row.dayCoolKwh + row.nightCoolKwh)
                             annualEvKwh     = sumOver (\row -> row.dayEvKwh + row.nightEvKwh)
                             annualHouseholdKwh = sumOver (\row -> row.dayHouseholdKwh + row.nightHouseholdKwh)
-                            annualBatteryKwh = sumOver .batteryDischargeKwh
+                            annualDhwElec = sumOver (\row -> row.dayDhwKwh + row.nightDhwKwh)
+                            annualBatteryKwh = sumOver (\row -> row.batteryDayDischargeKwh + row.batteryNightDischargeKwh)
                         in
-                        runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualBatteryKwh
+                        runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualDhwElec annualBatteryKwh
 
                     Nothing ->
                         text ""
@@ -2130,10 +2152,10 @@ ufhCard model u =
         ]
 
 
-runningCard : UFHResults -> Float -> Float -> Float -> Float -> Float -> Html Msg
-runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualBatteryKwh =
+runningCard : UFHResults -> Float -> Float -> Float -> Float -> Float -> Float -> Html Msg
+runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualDhwElec annualBatteryKwh =
     let
-        totalElec = u.annualElecKwh + annualCoolElec + annualHouseholdKwh + annualEvKwh
+        totalElec = u.annualElecKwh + annualCoolElec + annualHouseholdKwh + annualEvKwh + annualDhwElec
     in
     card "#f5f7ff" "Annual Energy"
         [ detailRow "Gross heat demand"   (String.fromInt (round u.annualHeatKwh))     "kWh/yr"
@@ -2144,6 +2166,8 @@ runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annual
         , detailRow "Cooling demand"      (String.fromInt (round annualCoolKwh))       "kWh/yr"
         , hr [ style "border" "none", style "border-top" "1px solid #dde3f0", style "margin" "0.4rem 0" ] []
         , detailRow "Electricity (heating)"  (String.fromInt (round u.annualElecKwh))   "kWh/yr"
+        , detailRow ("Electricity (hot water, SCOP " ++ fmt1 dhwScop ++ ")")
+                    (String.fromInt (round annualDhwElec)) "kWh/yr"
         , detailRow ("Electricity (cooling, SCOP " ++ fmt1 coolingScop ++ ")")
                     (String.fromInt (round annualCoolElec)) "kWh/yr"
         , detailRow "Electricity (household)" (String.fromInt (round annualHouseholdKwh)) "kWh/yr"
