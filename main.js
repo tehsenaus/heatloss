@@ -6892,18 +6892,26 @@ var $author$project$Main$inputsPanel = function (m) {
 					]))
 			]));
 };
-var $author$project$Main$performanceRatio = 0.80;
-var $author$project$Main$pvPitch = function (m) {
-	var _v0 = m.roofType;
-	if (_v0.$ === 'FlatRoof') {
-		return 0;
-	} else {
-		return A2(
-			$elm$core$Maybe$withDefault,
-			35,
-			$elm$core$String$toFloat(m.pitchAngle));
+var $author$project$Main$cibseHddBase = 15.5;
+var $author$project$Main$daysInMonth = _List_fromArray(
+	[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]);
+var $author$project$Main$estimateCop = F2(
+	function (flowC, sourceC) {
+		var lift = A2($elm$core$Basics$max, 1, flowC - sourceC);
+		var carnot = (flowC + 273.15) / lift;
+		return 0.45 * carnot;
+	});
+var $author$project$Main$floorCoeff = function (c) {
+	switch (c.$) {
+		case 'Tile':
+			return 6.7;
+		case 'Wood':
+			return 5.0;
+		default:
+			return 3.7;
 	}
 };
+var $author$project$Main$floorSurfaceH = 10.8;
 var $author$project$Main$interpolate = F2(
 	function (pts, x) {
 		interpolate:
@@ -6987,45 +6995,6 @@ var $author$project$Main$tiltOrientFactor = F2(
 			points,
 			A3($elm$core$Basics$clamp, 0, 90, pitch));
 	});
-var $author$project$Main$calculatePv = F2(
-	function (m, u) {
-		return A2(
-			$elm$core$Maybe$andThen,
-			function (kwp) {
-				return A2(
-					$elm$core$Maybe$map,
-					function (h) {
-						var pitch = $author$project$Main$pvPitch(m);
-						var factor = A2($author$project$Main$tiltOrientFactor, m.pvOrientation, pitch);
-						var specificYield = (h * factor) * $author$project$Main$performanceRatio;
-						var annualKwh = kwp * specificYield;
-						var pctOfHp = (u.annualElecKwh > 0) ? ((annualKwh / u.annualElecKwh) * 100) : 0;
-						return {annualKwh: annualKwh, factor: factor, pctOfHpElec: pctOfHp, pitch: pitch, specificYield: specificYield};
-					},
-					$elm$core$String$toFloat(m.pvIrradiation));
-			},
-			$elm$core$String$toFloat(m.pvKwp));
-	});
-var $author$project$Main$cibseHddBase = 15.5;
-var $author$project$Main$daysInMonth = _List_fromArray(
-	[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]);
-var $author$project$Main$estimateCop = F2(
-	function (flowC, sourceC) {
-		var lift = A2($elm$core$Basics$max, 1, flowC - sourceC);
-		var carnot = (flowC + 273.15) / lift;
-		return 0.45 * carnot;
-	});
-var $author$project$Main$floorCoeff = function (c) {
-	switch (c.$) {
-		case 'Tile':
-			return 6.7;
-		case 'Wood':
-			return 5.0;
-		default:
-			return 3.7;
-	}
-};
-var $author$project$Main$floorSurfaceH = 10.8;
 var $author$project$Main$glazingVertFactor = 0.7 * (((0.35 * A2($author$project$Main$tiltOrientFactor, $author$project$Main$North, 90)) + (0.35 * A2($author$project$Main$tiltOrientFactor, $author$project$Main$South, 90))) + (0.30 * A2($author$project$Main$tiltOrientFactor, $author$project$Main$EastWest, 90)));
 var $author$project$Main$monthlyAvgTempC = _List_fromArray(
 	[4.5, 4.5, 6.5, 8.5, 11.5, 14.5, 16.5, 16.5, 14.0, 10.5, 6.5, 4.5]);
@@ -7111,83 +7080,83 @@ var $author$project$Main$utilisationFactor = F2(
 		var a = 1 + (tau / 15);
 		return (gamma < 0) ? 1 : (($elm$core$Basics$abs(gamma - 1) < 1.0e-6) ? (a / (a + 1)) : ((1 - A2($elm$core$Basics$pow, gamma, a)) / (1 - A2($elm$core$Basics$pow, gamma, a + 1))));
 	});
-var $author$project$Main$calculateUFH = F2(
+var $author$project$Main$calculateHeating = F2(
 	function (m, r) {
 		return A2(
 			$elm$core$Maybe$andThen,
-			function (hfa) {
+			function (heatedFloorAreaM2) {
 				return A2(
 					$elm$core$Maybe$andThen,
-					function (ft) {
+					function (flowTempC) {
 						return A2(
 							$elm$core$Maybe$andThen,
-							function (edt) {
+							function (emitterDeltaTK) {
 								return A2(
 									$elm$core$Maybe$andThen,
-									function (hdd_) {
+									function (hddCibseDegDays) {
 										return A2(
 											$elm$core$Maybe$andThen,
-											function (ti) {
+											function (indoorTempC) {
 												return A2(
 													$elm$core$Maybe$andThen,
-													function (to_) {
+													function (outdoorTempC) {
 														return A2(
 															$elm$core$Maybe$andThen,
-															function (gVal) {
+															function (gValue) {
 																return A2(
 																	$elm$core$Maybe$andThen,
-																	function (tfa) {
+																	function (totalFloorAreaM2) {
 																		return A2(
 																			$elm$core$Maybe$map,
-																			function (horizIrr) {
-																				var tau = $author$project$Main$thermalMassTau(m.thermalMass);
-																				var specHeatLoss = (r.deltaT > 0) ? (r.qTotal / r.deltaT) : 0;
-																				var scop = A2($author$project$Main$estimateCop, ft, 7);
-																				var requiredSpecific = (hfa > 0) ? (r.qTotal / hfa) : 0;
-																				var monthlyHddFractions = $author$project$Main$hddFractionsAtBase(ti);
-																				var meanWater = ft - (edt / 2);
-																				var k = $author$project$Main$floorCoeff(m.floorCovering);
-																				var requiredMeanWater = ti + ((k > 0) ? (requiredSpecific / k) : 0);
-																				var requiredFlowTemp = requiredMeanWater + (edt / 2);
-																				var hddSetpoint = $author$project$Main$hddAtBase(ti);
-																				var hddCibse = $author$project$Main$hddAtBase($author$project$Main$cibseHddBase);
-																				var hddScale = (hddCibse > 0) ? (hddSetpoint / hddCibse) : 1;
-																				var effectiveHdd = hdd_ * hddScale;
-																				var designCop = A2($author$project$Main$estimateCop, ft, to_);
-																				var dTemp = A2($elm$core$Basics$max, 0, meanWater - ti);
-																				var specificOutput = k * dTemp;
-																				var maxOutput = specificOutput * hfa;
-																				var surfaceTemp = ti + (specificOutput / $author$project$Main$floorSurfaceH);
-																				var coverage = (r.qTotal > 0) ? ((maxOutput / r.qTotal) * 100) : 0;
-																				var annualSolarGain = ((r.glazingArea * gVal) * horizIrr) * $author$project$Main$glazingVertFactor;
-																				var annualInternalGain = (($author$project$Main$internalGainsWperM2 * tfa) * 8760) / 1000;
-																				var annualTotalGain = annualSolarGain + annualInternalGain;
-																				var internalMonthly = A2(
+																			function (horizIrradKwhPerM2Yr) {
+																				var tauHours = $author$project$Main$thermalMassTau(m.thermalMass);
+																				var specHeatLossWperK = (r.deltaT > 0) ? (r.qTotal / r.deltaT) : 0;
+																				var scop = A2($author$project$Main$estimateCop, flowTempC, 7);
+																				var requiredSpecificWperM2 = (heatedFloorAreaM2 > 0) ? (r.qTotal / heatedFloorAreaM2) : 0;
+																				var monthlyHddFractions = $author$project$Main$hddFractionsAtBase(indoorTempC);
+																				var meanWaterTempC = flowTempC - (emitterDeltaTK / 2);
+																				var waterAboveIndoorK = A2($elm$core$Basics$max, 0, meanWaterTempC - indoorTempC);
+																				var hddAtSetpointDegDays = $author$project$Main$hddAtBase(indoorTempC);
+																				var hddAtCibseBaseDegDays = $author$project$Main$hddAtBase($author$project$Main$cibseHddBase);
+																				var hddScaleFactor = (hddAtCibseBaseDegDays > 0) ? (hddAtSetpointDegDays / hddAtCibseBaseDegDays) : 1;
+																				var floorKwPerM2K = $author$project$Main$floorCoeff(m.floorCovering);
+																				var requiredMeanWaterTempC = indoorTempC + ((floorKwPerM2K > 0) ? (requiredSpecificWperM2 / floorKwPerM2K) : 0);
+																				var requiredFlowTempC = requiredMeanWaterTempC + (emitterDeltaTK / 2);
+																				var specificOutputWperM2 = floorKwPerM2K * waterAboveIndoorK;
+																				var maxOutputW = specificOutputWperM2 * heatedFloorAreaM2;
+																				var surfaceTempC = indoorTempC + (specificOutputWperM2 / $author$project$Main$floorSurfaceH);
+																				var effectiveHddDegDays = hddCibseDegDays * hddScaleFactor;
+																				var designCop = A2($author$project$Main$estimateCop, flowTempC, outdoorTempC);
+																				var coveragePct = (r.qTotal > 0) ? ((maxOutputW / r.qTotal) * 100) : 0;
+																				var annualSolarGainKwh = ((r.glazingArea * gValue) * horizIrradKwhPerM2Yr) * $author$project$Main$glazingVertFactor;
+																				var annualInternalGainKwh = (($author$project$Main$internalGainsWperM2 * totalFloorAreaM2) * 8760) / 1000;
+																				var annualTotalGainKwh = annualSolarGainKwh + annualInternalGainKwh;
+																				var internalMonthlyKwh = A2(
 																					$elm$core$List$map,
 																					function (d) {
-																						return (annualInternalGain * d) / 365;
+																						return (annualInternalGainKwh * d) / 365;
 																					},
 																					$author$project$Main$daysInMonth);
-																				var annualHeatKwh = ((specHeatLoss * effectiveHdd) * 24) / 1000;
-																				var monthlyUseful = A4(
+																				var annualHeatKwh = ((specHeatLossWperK * effectiveHddDegDays) * 24) / 1000;
+																				var monthlyUsefulKwh = A4(
 																					$elm$core$List$map3,
 																					F3(
-																						function (hf, pf, internal) {
-																							var grossHeat = annualHeatKwh * hf;
-																							var gain = (annualSolarGain * pf) + internal;
-																							return (grossHeat < 0.001) ? 0 : A2(
+																						function (hddFrac, pvFrac, internalKwh) {
+																							var grossHeatKwh = annualHeatKwh * hddFrac;
+																							var gainKwh = (annualSolarGainKwh * pvFrac) + internalKwh;
+																							return (grossHeatKwh < 0.001) ? 0 : A2(
 																								$elm$core$Basics$min,
-																								grossHeat,
-																								A2($author$project$Main$utilisationFactor, gain / grossHeat, tau) * gain);
+																								grossHeatKwh,
+																								A2($author$project$Main$utilisationFactor, gainKwh / grossHeatKwh, tauHours) * gainKwh);
 																						}),
 																					monthlyHddFractions,
 																					$author$project$Main$pvFractions,
-																					internalMonthly);
-																				var annualUsefulGain = $elm$core$List$sum(monthlyUseful);
-																				var annualNetHeatKwh = A2($elm$core$Basics$max, 0, annualHeatKwh - annualUsefulGain);
-																				var annualExcessGain = A2($elm$core$Basics$max, 0, annualTotalGain - annualUsefulGain);
+																					internalMonthlyKwh);
+																				var annualUsefulGainKwh = $elm$core$List$sum(monthlyUsefulKwh);
+																				var annualNetHeatKwh = A2($elm$core$Basics$max, 0, annualHeatKwh - annualUsefulGainKwh);
+																				var annualExcessGainKwh = A2($elm$core$Basics$max, 0, annualTotalGainKwh - annualUsefulGainKwh);
 																				var annualElecKwh = (scop > 0) ? (annualNetHeatKwh / scop) : 0;
-																				return {annualElecKwh: annualElecKwh, annualExcessGain: annualExcessGain, annualHeatKwh: annualHeatKwh, annualInternalGain: annualInternalGain, annualNetHeatKwh: annualNetHeatKwh, annualSolarGain: annualSolarGain, annualUsefulGain: annualUsefulGain, coverage: coverage, designCop: designCop, effectiveHdd: effectiveHdd, hddFractions: monthlyHddFractions, maxOutput: maxOutput, meanWaterTemp: meanWater, requiredFlowTemp: requiredFlowTemp, scop: scop, specificOutput: specificOutput, surfaceTemp: surfaceTemp};
+																				return {annualElecKwh: annualElecKwh, annualExcessGain: annualExcessGainKwh, annualHeatKwh: annualHeatKwh, annualInternalGain: annualInternalGainKwh, annualNetHeatKwh: annualNetHeatKwh, annualSolarGain: annualSolarGainKwh, annualUsefulGain: annualUsefulGainKwh, coverage: coveragePct, designCop: designCop, effectiveHdd: effectiveHddDegDays, hddFractions: monthlyHddFractions, maxOutput: maxOutputW, meanWaterTemp: meanWaterTempC, requiredFlowTemp: requiredFlowTempC, scop: scop, specificOutput: specificOutputWperM2, surfaceTemp: surfaceTempC};
 																			},
 																			$elm$core$String$toFloat(m.pvIrradiation));
 																	},
@@ -7206,6 +7175,37 @@ var $author$project$Main$calculateUFH = F2(
 					$elm$core$String$toFloat(m.flowTemp));
 			},
 			$elm$core$String$toFloat(m.heatedFloorArea));
+	});
+var $author$project$Main$performanceRatio = 0.80;
+var $author$project$Main$pvPitch = function (m) {
+	var _v0 = m.roofType;
+	if (_v0.$ === 'FlatRoof') {
+		return 0;
+	} else {
+		return A2(
+			$elm$core$Maybe$withDefault,
+			35,
+			$elm$core$String$toFloat(m.pitchAngle));
+	}
+};
+var $author$project$Main$calculatePv = F2(
+	function (m, u) {
+		return A2(
+			$elm$core$Maybe$andThen,
+			function (kwp) {
+				return A2(
+					$elm$core$Maybe$map,
+					function (h) {
+						var pitch = $author$project$Main$pvPitch(m);
+						var factor = A2($author$project$Main$tiltOrientFactor, m.pvOrientation, pitch);
+						var specificYield = (h * factor) * $author$project$Main$performanceRatio;
+						var annualKwh = kwp * specificYield;
+						var pctOfHp = (u.annualElecKwh > 0) ? ((annualKwh / u.annualElecKwh) * 100) : 0;
+						return {annualKwh: annualKwh, factor: factor, pctOfHpElec: pctOfHp, pitch: pitch, specificYield: specificYield};
+					},
+					$elm$core$String$toFloat(m.pvIrradiation));
+			},
+			$elm$core$String$toFloat(m.pvKwp));
 	});
 var $author$project$Main$legendSwatch = F2(
 	function (colour, label) {
@@ -8304,7 +8304,7 @@ var $author$project$Main$monthlyChartSection = F2(
 							},
 							A2($author$project$Main$calculatePv, model, u));
 					},
-					A2($author$project$Main$calculateUFH, model, r));
+					A2($author$project$Main$calculateHeating, model, r));
 			},
 			maybeR);
 		if (_v0.$ === 'Nothing') {
@@ -9305,7 +9305,7 @@ var $author$project$Main$resultsPanel = F2(
 						}
 					}(),
 						function () {
-						var _v2 = A2($author$project$Main$calculateUFH, model, r);
+						var _v2 = A2($author$project$Main$calculateHeating, model, r);
 						if (_v2.$ === 'Just') {
 							var u = _v2.a;
 							return A2($author$project$Main$ufhCard, model, u);
@@ -9324,7 +9324,7 @@ var $author$project$Main$resultsPanel = F2(
 									},
 									A2($author$project$Main$calculatePv, model, u));
 							},
-							A2($author$project$Main$calculateUFH, model, r));
+							A2($author$project$Main$calculateHeating, model, r));
 						if (_v3.$ === 'Just') {
 							var _v4 = _v3.a;
 							var u = _v4.a;
@@ -9425,7 +9425,7 @@ var $author$project$Main$resultsPanel = F2(
 						var _v8 = A2(
 							$elm$core$Maybe$andThen,
 							$author$project$Main$calculatePv(model),
-							A2($author$project$Main$calculateUFH, model, r));
+							A2($author$project$Main$calculateHeating, model, r));
 						if (_v8.$ === 'Just') {
 							var p = _v8.a;
 							return A2($author$project$Main$pvCard, model, p);

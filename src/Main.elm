@@ -879,7 +879,7 @@ calculate m =
 -- UFH / HEAT PUMP
 
 
-type alias UFHResults =
+type alias HeatingResults =
     { specificOutput   : Float
     , maxOutput        : Float
     , coverage         : Float
@@ -930,39 +930,39 @@ floorSurfaceH =
     10.8
 
 
-calculateUFH : Model -> Results -> Maybe UFHResults
-calculateUFH m r =
-    String.toFloat m.heatedFloorArea |> Maybe.andThen (\hfa ->
-    String.toFloat m.flowTemp        |> Maybe.andThen (\ft ->
-    String.toFloat m.emitterDeltaT   |> Maybe.andThen (\edt ->
-    String.toFloat m.hdd             |> Maybe.andThen (\hdd_ ->
-    String.toFloat m.tempIn          |> Maybe.andThen (\ti ->
-    String.toFloat m.tempOut         |> Maybe.andThen (\to_ ->
-    String.toFloat m.gValue          |> Maybe.andThen (\gVal ->
-    String.toFloat m.totalFloorArea  |> Maybe.andThen (\tfa ->
-    String.toFloat m.pvIrradiation   |> Maybe.map     (\horizIrr ->
+calculateHeating : Model -> Results -> Maybe HeatingResults
+calculateHeating m r =
+    String.toFloat m.heatedFloorArea |> Maybe.andThen (\heatedFloorAreaM2 ->
+    String.toFloat m.flowTemp        |> Maybe.andThen (\flowTempC ->
+    String.toFloat m.emitterDeltaT   |> Maybe.andThen (\emitterDeltaTK ->
+    String.toFloat m.hdd             |> Maybe.andThen (\hddCibseDegDays ->
+    String.toFloat m.tempIn          |> Maybe.andThen (\indoorTempC ->
+    String.toFloat m.tempOut         |> Maybe.andThen (\outdoorTempC ->
+    String.toFloat m.gValue          |> Maybe.andThen (\gValue ->
+    String.toFloat m.totalFloorArea  |> Maybe.andThen (\totalFloorAreaM2 ->
+    String.toFloat m.pvIrradiation   |> Maybe.map     (\horizIrradKwhPerM2Yr ->
         let
-            k              = floorCoeff m.floorCovering
-            meanWater      = ft - edt / 2
-            dTemp          = Basics.max 0 (meanWater - ti)
-            specificOutput = k * dTemp
-            maxOutput      = specificOutput * hfa
-            coverage       = if r.qTotal > 0 then maxOutput / r.qTotal * 100 else 0
-            surfaceTemp    = ti + specificOutput / floorSurfaceH
+            floorKwPerM2K         = floorCoeff m.floorCovering
+            meanWaterTempC        = flowTempC - emitterDeltaTK / 2
+            waterAboveIndoorK     = Basics.max 0 (meanWaterTempC - indoorTempC)
+            specificOutputWperM2  = floorKwPerM2K * waterAboveIndoorK
+            maxOutputW            = specificOutputWperM2 * heatedFloorAreaM2
+            coveragePct           = if r.qTotal > 0 then maxOutputW / r.qTotal * 100 else 0
+            surfaceTempC          = indoorTempC + specificOutputWperM2 / floorSurfaceH
 
-            requiredSpecific =
-                if hfa > 0 then r.qTotal / hfa else 0
+            requiredSpecificWperM2 =
+                if heatedFloorAreaM2 > 0 then r.qTotal / heatedFloorAreaM2 else 0
 
-            requiredMeanWater =
-                ti + (if k > 0 then requiredSpecific / k else 0)
+            requiredMeanWaterTempC =
+                indoorTempC + (if floorKwPerM2K > 0 then requiredSpecificWperM2 / floorKwPerM2K else 0)
 
-            requiredFlowTemp = requiredMeanWater + edt / 2
+            requiredFlowTempC = requiredMeanWaterTempC + emitterDeltaTK / 2
 
-            designCop = estimateCop ft to_
-            scop      = estimateCop ft 7
+            designCop = estimateCop flowTempC outdoorTempC
+            scop      = estimateCop flowTempC 7
 
             -- Specific heat loss W/K from design calc
-            specHeatLoss =
+            specHeatLossWperK =
                 if r.deltaT > 0 then r.qTotal / r.deltaT else 0
 
             -- User enters HDD at the CIBSE base (15.5°C) — a climate
@@ -971,74 +971,75 @@ calculateUFH m r =
             -- the setpoint input instead of a separate knob. Internal
             -- gains are handled below as a separate utilisation input,
             -- not via a base-temp offset — avoids double-counting solar.
-            hddCibse     = hddAtBase cibseHddBase
-            hddSetpoint  = hddAtBase ti
-            hddScale     = if hddCibse > 0 then hddSetpoint / hddCibse else 1
-            effectiveHdd = hdd_ * hddScale
+            hddAtCibseBaseDegDays = hddAtBase cibseHddBase
+            hddAtSetpointDegDays  = hddAtBase indoorTempC
+            hddScaleFactor        =
+                if hddAtCibseBaseDegDays > 0 then hddAtSetpointDegDays / hddAtCibseBaseDegDays else 1
+            effectiveHddDegDays   = hddCibseDegDays * hddScaleFactor
 
-            annualHeatKwh = specHeatLoss * effectiveHdd * 24 / 1000
+            annualHeatKwh = specHeatLossWperK * effectiveHddDegDays * 24 / 1000
 
-            monthlyHddFractions = hddFractionsAtBase ti
+            monthlyHddFractions = hddFractionsAtBase indoorTempC
 
             -- Solar gain through glazing (annual)
-            annualSolarGain =
-                r.glazingArea * gVal * horizIrr * glazingVertFactor
+            annualSolarGainKwh =
+                r.glazingArea * gValue * horizIrradKwhPerM2Yr * glazingVertFactor
 
             -- Internal gains (people, appliances, DHW losses) — same
             -- 4 W/m² used by the cooling calc, distributed by days.
-            annualInternalGain =
-                internalGainsWperM2 * tfa * 8760 / 1000
+            annualInternalGainKwh =
+                internalGainsWperM2 * totalFloorAreaM2 * 8760 / 1000
 
-            internalMonthly =
-                List.map (\d -> annualInternalGain * d / 365) daysInMonth
+            internalMonthlyKwh =
+                List.map (\d -> annualInternalGainKwh * d / 365) daysInMonth
 
             -- ISO 13790 utilisation factor: η × gain ≤ demand naturally,
             -- and excess (= total gain − useful) represents gains the
             -- heating system can't absorb (cooling-load potential in
             -- summer, or spill in shoulder months).
-            tau = thermalMassTau m.thermalMass
+            tauHours = thermalMassTau m.thermalMass
 
-            monthlyUseful =
+            monthlyUsefulKwh =
                 List.map3
-                    (\hf pf internal ->
+                    (\hddFrac pvFrac internalKwh ->
                         let
-                            grossHeat = annualHeatKwh * hf
-                            gain      = annualSolarGain * pf + internal
+                            grossHeatKwh = annualHeatKwh * hddFrac
+                            gainKwh      = annualSolarGainKwh * pvFrac + internalKwh
                         in
-                        if grossHeat < 0.001 then
+                        if grossHeatKwh < 0.001 then
                             0
 
                         else
-                            Basics.min grossHeat
-                                (utilisationFactor (gain / grossHeat) tau * gain)
+                            Basics.min grossHeatKwh
+                                (utilisationFactor (gainKwh / grossHeatKwh) tauHours * gainKwh)
                     )
                     monthlyHddFractions
                     pvFractions
-                    internalMonthly
+                    internalMonthlyKwh
 
-            annualTotalGain  = annualSolarGain + annualInternalGain
-            annualUsefulGain = List.sum monthlyUseful
-            annualExcessGain = Basics.max 0 (annualTotalGain - annualUsefulGain)
-            annualNetHeatKwh = Basics.max 0 (annualHeatKwh - annualUsefulGain)
-            annualElecKwh    = if scop > 0 then annualNetHeatKwh / scop else 0
+            annualTotalGainKwh  = annualSolarGainKwh + annualInternalGainKwh
+            annualUsefulGainKwh = List.sum monthlyUsefulKwh
+            annualExcessGainKwh = Basics.max 0 (annualTotalGainKwh - annualUsefulGainKwh)
+            annualNetHeatKwh    = Basics.max 0 (annualHeatKwh - annualUsefulGainKwh)
+            annualElecKwh       = if scop > 0 then annualNetHeatKwh / scop else 0
         in
-        { specificOutput   = specificOutput
-        , maxOutput        = maxOutput
-        , coverage         = coverage
-        , requiredFlowTemp = requiredFlowTemp
-        , surfaceTemp      = surfaceTemp
-        , meanWaterTemp    = meanWater
+        { specificOutput   = specificOutputWperM2
+        , maxOutput        = maxOutputW
+        , coverage         = coveragePct
+        , requiredFlowTemp = requiredFlowTempC
+        , surfaceTemp      = surfaceTempC
+        , meanWaterTemp    = meanWaterTempC
         , designCop        = designCop
         , scop             = scop
         , annualHeatKwh    = annualHeatKwh
-        , annualSolarGain  = annualSolarGain
-        , annualUsefulGain = annualUsefulGain
-        , annualExcessGain = annualExcessGain
+        , annualSolarGain  = annualSolarGainKwh
+        , annualUsefulGain = annualUsefulGainKwh
+        , annualExcessGain = annualExcessGainKwh
         , annualNetHeatKwh = annualNetHeatKwh
         , annualElecKwh    = annualElecKwh
-        , effectiveHdd     = effectiveHdd
+        , effectiveHdd     = effectiveHddDegDays
         , hddFractions     = monthlyHddFractions
-        , annualInternalGain = annualInternalGain
+        , annualInternalGain = annualInternalGainKwh
         }
     )))))))))
 
@@ -1063,7 +1064,7 @@ pvPitch m =
         VaultedRoof -> Maybe.withDefault 35 (String.toFloat m.pitchAngle)
 
 
-calculatePv : Model -> UFHResults -> Maybe PvResults
+calculatePv : Model -> HeatingResults -> Maybe PvResults
 calculatePv m u =
     String.toFloat m.pvKwp         |> Maybe.andThen (\kwp ->
     String.toFloat m.pvIrradiation |> Maybe.map     (\h ->
@@ -1229,7 +1230,7 @@ daysInMonth =
     [ 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 ]
 
 
-monthlyBreakdown : Model -> Results -> UFHResults -> PvResults -> List MonthlyRow
+monthlyBreakdown : Model -> Results -> HeatingResults -> PvResults -> List MonthlyRow
 monthlyBreakdown m r u pv =
     let
         tau = thermalMassTau m.thermalMass
@@ -1514,7 +1515,7 @@ view model =
 
 monthlyChartSection : Model -> Maybe Results -> Html Msg
 monthlyChartSection model maybeR =
-    case maybeR |> Maybe.andThen (\r -> calculateUFH model r |> Maybe.andThen (\u -> calculatePv model u |> Maybe.map (\pv -> ( r, u, pv )))) of
+    case maybeR |> Maybe.andThen (\r -> calculateHeating model r |> Maybe.andThen (\u -> calculatePv model u |> Maybe.map (\pv -> ( r, u, pv )))) of
         Nothing ->
             text ""
 
@@ -2376,10 +2377,10 @@ resultsPanel model maybeR =
                 , case calculateCooling model r of
                     Just c  -> coolingCard c
                     Nothing -> text ""
-                , case calculateUFH model r of
+                , case calculateHeating model r of
                     Just u  -> ufhCard model u
                     Nothing -> text ""
-                , case calculateUFH model r |> Maybe.andThen (\u -> calculatePv model u |> Maybe.map (\pv -> ( u, pv ))) of
+                , case calculateHeating model r |> Maybe.andThen (\u -> calculatePv model u |> Maybe.map (\pv -> ( u, pv ))) of
                     Just ( u, pv ) ->
                         let
                             rows = monthlyBreakdown model r u pv
@@ -2411,7 +2412,7 @@ resultsPanel model maybeR =
 
                     Nothing ->
                         text ""
-                , case calculateUFH model r |> Maybe.andThen (calculatePv model) of
+                , case calculateHeating model r |> Maybe.andThen (calculatePv model) of
                     Just p  -> pvCard model p
                     Nothing -> text ""
                 ]
@@ -2471,7 +2472,7 @@ pvCard _ pv =
         ]
 
 
-ufhCard : Model -> UFHResults -> Html Msg
+ufhCard : Model -> HeatingResults -> Html Msg
 ufhCard model u =
     let
         coverageColor =
@@ -2515,7 +2516,7 @@ ufhCard model u =
         ]
 
 
-runningCard : UFHResults -> Float -> Float -> Float -> Float -> Float -> Float -> Html Msg
+runningCard : HeatingResults -> Float -> Float -> Float -> Float -> Float -> Float -> Html Msg
 runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualDhwElec annualBatteryCycles =
     let
         totalElec = u.annualElecKwh + annualCoolElec + annualHouseholdKwh + annualEvKwh + annualDhwElec
