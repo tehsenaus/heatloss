@@ -7266,11 +7266,18 @@ var $elm$core$List$maximum = function (list) {
 		return $elm$core$Maybe$Nothing;
 	}
 };
+var $author$project$Main$fmt1 = function (f) {
+	return $elm$core$String$fromFloat(
+		$elm$core$Basics$round(f * 10) / 10);
+};
+var $elm$html$Html$Attributes$title = $elm$html$Html$Attributes$stringProperty('title');
 var $author$project$Main$singleBarChart = F4(
 	function (rows, getter, colour, maxVal) {
 		var chartH = 140.0;
 		var column = function (row) {
-			var h = (getter(row) * chartH) / A2($elm$core$Basics$max, maxVal, 0.001);
+			var v = getter(row);
+			var tip = row.month + (': ' + ($author$project$Main$fmt1(v) + ' kWh/day'));
+			var h = (v * chartH) / A2($elm$core$Basics$max, maxVal, 0.001);
 			return A2(
 				$elm$html$Html$div,
 				_List_fromArray(
@@ -7305,7 +7312,8 @@ var $author$project$Main$singleBarChart = F4(
 										$elm$html$Html$Attributes$style,
 										'height',
 										$elm$core$String$fromFloat(h) + 'px'),
-										A2($elm$html$Html$Attributes$style, 'background', colour)
+										A2($elm$html$Html$Attributes$style, 'background', colour),
+										$elm$html$Html$Attributes$title(tip)
 									]),
 								_List_Nil)
 							])),
@@ -7525,6 +7533,9 @@ var $author$project$Main$signedBarChart = F2(
 		var column = function (_v0) {
 			var label = _v0.a;
 			var v = _v0.b;
+			var kind = (v >= 0) ? 'Net cost' : 'Net credit';
+			var tip = label + (' — ' + (kind + (': £' + $author$project$Main$fmtMoney(
+				$elm$core$Basics$abs(v)))));
 			var h = ($elm$core$Basics$abs(v) * halfH) / extent;
 			var colour = (v >= 0) ? '#c23b3b' : '#2e7d32';
 			return A2(
@@ -7579,6 +7590,7 @@ var $author$project$Main$signedBarChart = F2(
 										'height',
 										$elm$core$String$fromFloat(h) + 'px'),
 										A2($elm$html$Html$Attributes$style, 'background', colour),
+										$elm$html$Html$Attributes$title(tip),
 										(v >= 0) ? A2(
 										$elm$html$Html$Attributes$style,
 										'top',
@@ -7723,36 +7735,40 @@ var $author$project$Main$dayNightChart = F3(
 			return isDay ? _Utils_Tuple2(
 				_List_fromArray(
 					[
-						_Utils_Tuple2(row.pvKwh, '#2e7d32'),
-						_Utils_Tuple2(row.batteryDayDischargeKwh, '#d4a017'),
-						_Utils_Tuple2(row.dayImportKwh, '#c23b3b')
+						_Utils_Tuple3(row.pvKwh, '#2e7d32', 'PV'),
+						_Utils_Tuple3(row.batteryDayDischargeKwh, '#d4a017', 'Battery discharge'),
+						_Utils_Tuple3(row.dayImportKwh, '#c23b3b', 'Grid import')
 					]),
 				_List_fromArray(
 					[
-						_Utils_Tuple2(row.dayHpKwh, '#c77700'),
-						_Utils_Tuple2(row.dayDhwKwh, '#b05577'),
-						_Utils_Tuple2(row.dayCoolKwh, '#3b82c4'),
-						_Utils_Tuple2(row.dayHouseholdKwh, '#888888'),
-						_Utils_Tuple2(row.dayEvKwh, '#444466'),
-						_Utils_Tuple2(row.batteryDayChargeFromPvKwh, '#d4a017'),
-						_Utils_Tuple2(row.exportKwh, '#6fa96f'),
-						_Utils_Tuple2(row.curtailedKwh, '#cccccc')
+						_Utils_Tuple3(row.dayHpKwh, '#c77700', 'HP heating'),
+						_Utils_Tuple3(row.dayDhwKwh, '#b05577', 'HP hot water (from PV)'),
+						_Utils_Tuple3(row.dayCoolKwh, '#3b82c4', 'HP cooling'),
+						_Utils_Tuple3(row.dayHouseholdKwh, '#888888', 'Household'),
+						_Utils_Tuple3(row.dayEvKwh, '#444466', 'EV (from PV)'),
+						_Utils_Tuple3(row.batteryDayChargeFromPvKwh, '#d4a017', 'Battery charge (from PV)'),
+						_Utils_Tuple3(row.exportKwh, '#6fa96f', 'Grid export'),
+						_Utils_Tuple3(row.curtailedKwh, '#cccccc', 'Curtailed (over export cap)')
 					])) : _Utils_Tuple2(
 				_List_fromArray(
 					[
-						_Utils_Tuple2(row.batteryNightDischargeKwh, '#d4a017'),
-						_Utils_Tuple2(row.nightImportKwh, '#c23b3b')
+						_Utils_Tuple3(row.batteryNightDischargeKwh, '#d4a017', 'Battery discharge (PV-stored)'),
+						_Utils_Tuple3(row.nightImportKwh, '#c23b3b', 'Grid import')
 					]),
 				_List_fromArray(
 					[
-						_Utils_Tuple2(row.nightHpKwh, '#c77700'),
-						_Utils_Tuple2(row.nightDhwKwh, '#b05577'),
-						_Utils_Tuple2(row.nightCoolKwh, '#3b82c4'),
-						_Utils_Tuple2(row.nightHouseholdKwh, '#888888'),
-						_Utils_Tuple2(row.nightEvKwh, '#444466'),
-						_Utils_Tuple2(row.nightChargeFromGridKwh, '#d4a017')
+						_Utils_Tuple3(row.nightHpKwh, '#c77700', 'HP heating'),
+						_Utils_Tuple3(row.nightDhwKwh, '#b05577', 'HP hot water'),
+						_Utils_Tuple3(row.nightCoolKwh, '#3b82c4', 'HP cooling'),
+						_Utils_Tuple3(row.nightHouseholdKwh, '#888888', 'Household'),
+						_Utils_Tuple3(row.nightEvKwh, '#444466', 'EV'),
+						_Utils_Tuple3(row.nightChargeFromGridKwh, '#d4a017', 'Battery charge (from off-peak grid)')
 					]));
 		};
+		var fmtSeg = F2(
+			function (label, v) {
+				return label + (': ' + ($author$project$Main$fmt1(v) + ' kWh/day'));
+			});
 		var chartH = 140.0;
 		var h = function (v) {
 			return (v * chartH) / A2($elm$core$Basics$max, maxVal, 0.001);
@@ -7782,8 +7798,8 @@ var $author$project$Main$dayNightChart = F3(
 					]));
 		};
 		var barW = 14.0;
-		var bar = F2(
-			function (colour, px) {
+		var bar = F3(
+			function (colour, px, label) {
 				return A2(
 					$elm$html$Html$div,
 					_List_fromArray(
@@ -7796,13 +7812,20 @@ var $author$project$Main$dayNightChart = F3(
 							$elm$html$Html$Attributes$style,
 							'height',
 							$elm$core$String$fromFloat(px) + 'px'),
-							A2($elm$html$Html$Attributes$style, 'background', colour)
+							A2($elm$html$Html$Attributes$style, 'background', colour),
+							$elm$html$Html$Attributes$title(label)
 						]),
 					_List_Nil);
 			});
 		var stack = function (segs) {
 			var total = $elm$core$List$sum(
-				A2($elm$core$List$map, $elm$core$Tuple$first, segs));
+				A2(
+					$elm$core$List$map,
+					function (_v2) {
+						var v = _v2.a;
+						return v;
+					},
+					segs));
 			return A2(
 				$elm$html$Html$div,
 				_List_fromArray(
@@ -7824,10 +7847,12 @@ var $author$project$Main$dayNightChart = F3(
 					function (_v1) {
 						var v = _v1.a;
 						var c = _v1.b;
-						return A2(
+						var lbl = _v1.c;
+						return A3(
 							bar,
 							c,
-							h(v));
+							h(v),
+							A2(fmtSeg, lbl, v));
 					},
 					segs));
 		};
@@ -7945,8 +7970,8 @@ var $author$project$Main$heatChart = F2(
 							$elm$core$Basics$round(v)) + ' kWh/day')
 					]));
 		};
-		var bar = F2(
-			function (colour, h) {
+		var bar = F3(
+			function (colour, h, label) {
 				return A2(
 					$elm$html$Html$div,
 					_List_fromArray(
@@ -7956,7 +7981,8 @@ var $author$project$Main$heatChart = F2(
 							$elm$html$Html$Attributes$style,
 							'height',
 							$elm$core$String$fromFloat(h) + 'px'),
-							A2($elm$html$Html$Attributes$style, 'background', colour)
+							A2($elm$html$Html$Attributes$style, 'background', colour),
+							$elm$html$Html$Attributes$title(label)
 						]),
 					_List_Nil);
 			});
@@ -7965,6 +7991,10 @@ var $author$project$Main$heatChart = F2(
 			var usefulH = (row.usefulGainKwh * chartH) / maxVal;
 			var heatH = (row.grossHeatKwh * chartH) / maxVal;
 			var gainH = (row.solarGainKwh * chartH) / maxVal;
+			var fmt = F2(
+				function (v, lbl) {
+					return row.month + (' — ' + (lbl + (': ' + ($author$project$Main$fmt1(v) + ' kWh/day'))));
+				});
 			return A2(
 				$elm$html$Html$div,
 				_List_fromArray(
@@ -7991,7 +8021,11 @@ var $author$project$Main$heatChart = F2(
 							]),
 						_List_fromArray(
 							[
-								A2(bar, '#c77700', heatH),
+								A3(
+								bar,
+								'#c77700',
+								heatH,
+								A2(fmt, row.grossHeatKwh, 'Heat demand (net of internal gains)')),
 								A2(
 								$elm$html$Html$div,
 								_List_fromArray(
@@ -8006,8 +8040,16 @@ var $author$project$Main$heatChart = F2(
 									]),
 								_List_fromArray(
 									[
-										A2(bar, '#c49b00', usefulH),
-										A2(bar, '#f0d970', wastedH)
+										A3(
+										bar,
+										'#c49b00',
+										usefulH,
+										A2(fmt, row.usefulGainKwh, 'Solar gain (useful)')),
+										A3(
+										bar,
+										'#f0d970',
+										wastedH,
+										A2(fmt, row.solarGainKwh - row.usefulGainKwh, 'Solar gain (wasted)'))
 									]))
 							])),
 						A2(
@@ -8485,10 +8527,6 @@ var $author$project$Main$detailRow = F3(
 						]))
 				]));
 	});
-var $author$project$Main$fmt1 = function (f) {
-	return $elm$core$String$fromFloat(
-		$elm$core$Basics$round(f * 10) / 10);
-};
 var $author$project$Main$fmt2 = function (f) {
 	return $elm$core$String$fromFloat(
 		$elm$core$Basics$round(f * 100) / 100);

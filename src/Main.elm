@@ -1662,11 +1662,12 @@ heatChart rows maxVal =
     let
         chartH = 160.0
 
-        bar colour h =
+        bar colour h label =
             div
                 [ style "width" "14px"
                 , style "height" (String.fromFloat h ++ "px")
                 , style "background" colour
+                , Html.Attributes.title label
                 ]
                 []
 
@@ -1676,6 +1677,7 @@ heatChart rows maxVal =
                 gainH    = row.solarGainKwh * chartH / maxVal
                 usefulH  = row.usefulGainKwh * chartH / maxVal
                 wastedH  = (row.solarGainKwh - row.usefulGainKwh) * chartH / maxVal
+                fmt v lbl = row.month ++ " — " ++ lbl ++ ": " ++ fmt1 v ++ " kWh/day"
             in
             div [ style "display" "flex", style "flex-direction" "column", style "align-items" "center", style "gap" "0.4rem", style "flex" "1" ]
                 [ div
@@ -1684,15 +1686,15 @@ heatChart rows maxVal =
                     , style "gap" "3px"
                     , style "height" (String.fromFloat chartH ++ "px")
                     ]
-                    [ bar "#c77700" heatH
+                    [ bar "#c77700" heatH (fmt row.grossHeatKwh "Heat demand (net of internal gains)")
                     , div
                         [ style "display" "flex"
                         , style "flex-direction" "column-reverse"
                         , style "height" (String.fromFloat gainH ++ "px")
                         , style "width" "14px"
                         ]
-                        [ bar "#c49b00" usefulH
-                        , bar "#f0d970" wastedH
+                        [ bar "#c49b00" usefulH (fmt row.usefulGainKwh "Solar gain (useful)")
+                        , bar "#f0d970" wastedH (fmt (row.solarGainKwh - row.usefulGainKwh) "Solar gain (wasted)")
                         ]
                     ]
                 , div [ style "font-size" "0.72rem", style "color" "#666" ] [ text row.month ]
@@ -1809,6 +1811,8 @@ signedBarChart values extent =
             let
                 h = Basics.abs v * halfH / extent
                 colour = if v >= 0 then "#c23b3b" else "#2e7d32"
+                kind = if v >= 0 then "Net cost" else "Net credit"
+                tip = label ++ " — " ++ kind ++ ": £" ++ fmtMoney (Basics.abs v)
             in
             div [ style "display" "flex", style "flex-direction" "column", style "align-items" "center", style "gap" "0.3rem", style "flex" "1" ]
                 [ div
@@ -1830,6 +1834,7 @@ signedBarChart values extent =
                         , style "width" "18px"
                         , style "height" (String.fromFloat h ++ "px")
                         , style "background" colour
+                        , Html.Attributes.title tip
                         , if v >= 0 then
                             style "top" (String.fromFloat (halfH - h) ++ "px")
                           else
@@ -1883,7 +1888,9 @@ singleBarChart rows getter colour maxVal =
 
         column row =
             let
-                h = getter row * chartH / Basics.max maxVal 0.001
+                v = getter row
+                h = v * chartH / Basics.max maxVal 0.001
+                tip = row.month ++ ": " ++ fmt1 v ++ " kWh/day"
             in
             div [ style "display" "flex", style "flex-direction" "column", style "align-items" "center", style "gap" "0.4rem", style "flex" "1" ]
                 [ div
@@ -1895,6 +1902,7 @@ singleBarChart rows getter colour maxVal =
                         [ style "width" "20px"
                         , style "height" (String.fromFloat h ++ "px")
                         , style "background" colour
+                        , Html.Attributes.title tip
                         ]
                         []
                     ]
@@ -1973,19 +1981,23 @@ dayNightChart rows maxVal isDay =
         chartH = 140.0
         barW = 14.0
 
-        bar colour px =
+        bar colour px label =
             div
                 [ style "width" (String.fromFloat barW ++ "px")
                 , style "height" (String.fromFloat px ++ "px")
                 , style "background" colour
+                , Html.Attributes.title label
                 ]
                 []
 
         h v = v * chartH / Basics.max maxVal 0.001
 
+        fmtSeg label v =
+            label ++ ": " ++ fmt1 v ++ " kWh/day"
+
         stack segs =
             let
-                total = List.sum (List.map Tuple.first segs)
+                total = List.sum (List.map (\( v, _, _ ) -> v) segs)
             in
             div
                 [ style "display" "flex"
@@ -1993,35 +2005,35 @@ dayNightChart rows maxVal isDay =
                 , style "height" (String.fromFloat (h total) ++ "px")
                 , style "width" (String.fromFloat barW ++ "px")
                 ]
-                (List.map (\( v, c ) -> bar c (h v)) segs)
+                (List.map (\( v, c, lbl ) -> bar c (h v) (fmtSeg lbl v)) segs)
 
         supplyAndDemand row =
             if isDay then
-                ( [ ( row.pvKwh,                   "#2e7d32" )
-                  , ( row.batteryDayDischargeKwh,  "#d4a017" )
-                  , ( row.dayImportKwh,            "#c23b3b" )
+                ( [ ( row.pvKwh,                   "#2e7d32", "PV" )
+                  , ( row.batteryDayDischargeKwh,  "#d4a017", "Battery discharge" )
+                  , ( row.dayImportKwh,            "#c23b3b", "Grid import" )
                   ]
-                , [ ( row.dayHpKwh,                "#c77700" )
-                  , ( row.dayDhwKwh,               "#b05577" )
-                  , ( row.dayCoolKwh,              "#3b82c4" )
-                  , ( row.dayHouseholdKwh,         "#888888" )
-                  , ( row.dayEvKwh,                "#444466" )
-                  , ( row.batteryDayChargeFromPvKwh, "#d4a017" )
-                  , ( row.exportKwh,               "#6fa96f" )
-                  , ( row.curtailedKwh,            "#cccccc" )
+                , [ ( row.dayHpKwh,                "#c77700", "HP heating" )
+                  , ( row.dayDhwKwh,               "#b05577", "HP hot water (from PV)" )
+                  , ( row.dayCoolKwh,              "#3b82c4", "HP cooling" )
+                  , ( row.dayHouseholdKwh,         "#888888", "Household" )
+                  , ( row.dayEvKwh,                "#444466", "EV (from PV)" )
+                  , ( row.batteryDayChargeFromPvKwh, "#d4a017", "Battery charge (from PV)" )
+                  , ( row.exportKwh,               "#6fa96f", "Grid export" )
+                  , ( row.curtailedKwh,            "#cccccc", "Curtailed (over export cap)" )
                   ]
                 )
 
             else
-                ( [ ( row.batteryNightDischargeKwh, "#d4a017" )
-                  , ( row.nightImportKwh,           "#c23b3b" )
+                ( [ ( row.batteryNightDischargeKwh, "#d4a017", "Battery discharge (PV-stored)" )
+                  , ( row.nightImportKwh,           "#c23b3b", "Grid import" )
                   ]
-                , [ ( row.nightHpKwh,            "#c77700" )
-                  , ( row.nightDhwKwh,           "#b05577" )
-                  , ( row.nightCoolKwh,          "#3b82c4" )
-                  , ( row.nightHouseholdKwh,     "#888888" )
-                  , ( row.nightEvKwh,            "#444466" )
-                  , ( row.nightChargeFromGridKwh, "#d4a017" )
+                , [ ( row.nightHpKwh,            "#c77700", "HP heating" )
+                  , ( row.nightDhwKwh,           "#b05577", "HP hot water" )
+                  , ( row.nightCoolKwh,          "#3b82c4", "HP cooling" )
+                  , ( row.nightHouseholdKwh,     "#888888", "Household" )
+                  , ( row.nightEvKwh,            "#444466", "EV" )
+                  , ( row.nightChargeFromGridKwh, "#d4a017", "Battery charge (from off-peak grid)" )
                   ]
                 )
 
