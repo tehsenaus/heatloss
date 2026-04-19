@@ -133,6 +133,9 @@ suite =
                         , evMilesPerYear = "8000"
                         , batteryKwh = "5"
                         , annualDhwKwh = "2500"
+                        , dayRate = "27"
+                        , nightRate = "7"
+                        , exportRate = "15"
                         }
                 in
                 decodeParams pinned

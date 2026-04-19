@@ -236,6 +236,9 @@ type alias Model =
     , evMilesPerYear : String
     , batteryKwh : String
     , annualDhwKwh : String
+    , dayRate : String
+    , nightRate : String
+    , exportRate : String
     }
 
 
@@ -297,6 +300,9 @@ defaultModel =
     , evMilesPerYear = "8000"
     , batteryKwh = "5"
     , annualDhwKwh = "2500"
+    , dayRate = "27"
+    , nightRate = "7"
+    , exportRate = "15"
     }
 
 
@@ -457,6 +463,9 @@ encodeParams m =
     , toF m.evMilesPerYear
     , toF m.batteryKwh
     , toF m.annualDhwKwh
+    , toF m.dayRate
+    , toF m.nightRate
+    , toF m.exportRate
     ]
 
 
@@ -508,6 +517,9 @@ decodeParams floats =
     , evMilesPerYear  = getS 30 d.evMilesPerYear
     , batteryKwh      = getS 31 d.batteryKwh
     , annualDhwKwh    = getS 32 d.annualDhwKwh
+    , dayRate         = getS 33 d.dayRate
+    , nightRate       = getS 34 d.nightRate
+    , exportRate      = getS 35 d.exportRate
     }
 
 
@@ -549,6 +561,9 @@ type Msg
     | SetEvMilesPerYear String
     | SetBatteryKwh String
     | SetAnnualDhwKwh String
+    | SetDayRate String
+    | SetNightRate String
+    | SetExportRate String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -596,6 +611,9 @@ updateField msg model =
         SetEvMilesPerYear v -> { model | evMilesPerYear = v }
         SetBatteryKwh v     -> { model | batteryKwh = v }
         SetAnnualDhwKwh v   -> { model | annualDhwKwh = v }
+        SetDayRate v        -> { model | dayRate = v }
+        SetNightRate v      -> { model | nightRate = v }
+        SetExportRate v     -> { model | exportRate = v }
 
 
 
@@ -1289,6 +1307,78 @@ monthlyBreakdown m r u pv =
 
 
 
+-- COST
+--
+-- Tariffs in p/kWh; costs computed in £. Per-day quantities come from
+-- the monthly sim; we multiply by days-in-month when aggregating.
+
+
+type alias Tariffs =
+    { dayRate : Float      -- p/kWh
+    , nightRate : Float    -- p/kWh
+    , exportRate : Float   -- p/kWh
+    }
+
+
+readTariffs : Model -> Tariffs
+readTariffs m =
+    { dayRate    = String.toFloat m.dayRate    |> Maybe.withDefault 0
+    , nightRate  = String.toFloat m.nightRate  |> Maybe.withDefault 0
+    , exportRate = String.toFloat m.exportRate |> Maybe.withDefault 0
+    }
+
+
+type alias CostRow =
+    { dayImportKwh   : Float
+    , nightImportKwh : Float
+    , exportKwh      : Float
+    , dayCost        : Float  -- £/day
+    , nightCost      : Float  -- £/day
+    , exportCredit   : Float  -- £/day
+    , netCost        : Float  -- £/day
+    }
+
+
+costForRow : Tariffs -> MonthlyRow -> CostRow
+costForRow t row =
+    let
+        dayDemand =
+            row.dayHpKwh + row.dayCoolKwh + row.dayHouseholdKwh + row.dayEvKwh + row.dayDhwKwh
+
+        nightDemand =
+            row.nightHpKwh + row.nightCoolKwh + row.nightHouseholdKwh + row.nightEvKwh + row.nightDhwKwh
+
+        -- PV first meets day demand; any surplus is stored (equals
+        -- batteryNightDischargeKwh since the battery cycles daily);
+        -- anything left over is exported.
+        pvUsedByDay = Basics.min row.pvKwh dayDemand
+
+        dayImport =
+            Basics.max 0 (dayDemand - pvUsedByDay - row.batteryDayDischargeKwh)
+
+        -- Night supply is battery discharge (PV-stored). Off-peak grid
+        -- charging of the battery shows up as nightChargeFromGridKwh.
+        nightImport =
+            Basics.max 0 (nightDemand - row.batteryNightDischargeKwh) + row.nightChargeFromGridKwh
+
+        export =
+            Basics.max 0 (row.pvKwh - pvUsedByDay - row.batteryNightDischargeKwh)
+
+        dayCost      = dayImport   * t.dayRate    / 100
+        nightCost    = nightImport * t.nightRate  / 100
+        exportCredit = export      * t.exportRate / 100
+    in
+    { dayImportKwh   = dayImport
+    , nightImportKwh = nightImport
+    , exportKwh      = export
+    , dayCost        = dayCost
+    , nightCost      = nightCost
+    , exportCredit   = exportCredit
+    , netCost        = dayCost + nightCost - exportCredit
+    }
+
+
+
 -- VIEW
 
 
@@ -1335,6 +1425,7 @@ monthlyChartSection model maybeR =
         Just ( r, u, pv ) ->
             let
                 rows = monthlyBreakdown model r u pv
+                tariffs = readTariffs model
                 maxVal =
                     let
                         daySupply m = m.pvKwh + m.batteryDayDischargeKwh
@@ -1353,25 +1444,40 @@ monthlyChartSection model maybeR =
                 , style "border-radius" "10px"
                 , style "padding" "1.25rem"
                 ]
-                [ p
-                    [ style "font-size" "0.72rem"
-                    , style "font-weight" "600"
-                    , style "text-transform" "uppercase"
-                    , style "letter-spacing" "0.08em"
-                    , style "color" "#888"
-                    , style "margin-bottom" "0.5rem"
-                    ]
-                    [ text "Monthly — Heat Pump Electricity vs Solar PV" ]
+                [ sectionHeading "Monthly — Electricity Supply & Demand"
                 , chartLegend
-                , p [ style "font-size" "0.7rem", style "color" "#888", style "margin" "0.5rem 0 0.25rem" ]
-                    [ text "Day (during daylight hours)" ]
+                , subHeading "Day (during daylight hours)"
                 , dayNightChart rows maxVal True
-                , p [ style "font-size" "0.7rem", style "color" "#888", style "margin" "1rem 0 0.25rem" ]
-                    [ text "Night" ]
+                , subHeading "Night"
                 , dayNightChart rows maxVal False
+                , costChartSection rows tariffs
                 , heatChartSection rows
                 , coolingChartSection rows
                 ]
+
+
+sectionHeading : String -> Html Msg
+sectionHeading label =
+    p
+        [ style "font-size" "0.72rem"
+        , style "font-weight" "600"
+        , style "text-transform" "uppercase"
+        , style "letter-spacing" "0.08em"
+        , style "color" "#888"
+        , style "margin-bottom" "0.5rem"
+        ]
+        [ text label ]
+
+
+subHeading : String -> Html Msg
+subHeading label =
+    p
+        [ style "font-size" "0.8rem"
+        , style "font-weight" "600"
+        , style "color" "#1a1a2e"
+        , style "margin" "1rem 0 0.5rem"
+        ]
+        [ text label ]
 
 
 heatChartSection : List MonthlyRow -> Html Msg
@@ -1517,6 +1623,114 @@ coolingChartSection rows =
                 ]
             , singleBarChart rows .coolingKwh "#3b82c4" maxC
             ]
+
+
+costChartSection : List MonthlyRow -> Tariffs -> Html Msg
+costChartSection rows tariffs =
+    let
+        monthly =
+            rows
+                |> List.map (\r -> ( r, costForRow tariffs r ))
+
+        monthCost ( r, c ) = c.netCost * r.daysInMonth
+        monthCosts = List.map monthCost monthly
+
+        maxPos = monthCosts |> List.maximum |> Maybe.withDefault 0 |> Basics.max 0
+        minNeg = monthCosts |> List.minimum |> Maybe.withDefault 0 |> Basics.min 0
+        extent = Basics.max 1 (Basics.max maxPos (Basics.abs minNeg))
+    in
+    div [ style "margin-top" "1.5rem" ]
+        [ sectionHeading "Monthly — Running Cost"
+        , div
+            [ style "display" "flex"
+            , style "gap" "1rem"
+            , style "flex-wrap" "wrap"
+            , style "font-size" "0.78rem"
+            , style "color" "#555"
+            , style "margin-bottom" "0.75rem"
+            ]
+            [ legendSwatch "#c23b3b" "Net cost (import − export)"
+            , legendSwatch "#2e7d32" "Net credit"
+            ]
+        , signedBarChart (List.map2 (\r c -> ( r.month, c )) rows monthCosts) extent
+        ]
+
+
+signedBarChart : List ( String, Float ) -> Float -> Html Msg
+signedBarChart values extent =
+    let
+        halfH = 90.0
+        chartH = halfH * 2
+
+        column ( label, v ) =
+            let
+                h = Basics.abs v * halfH / extent
+                colour = if v >= 0 then "#c23b3b" else "#2e7d32"
+            in
+            div [ style "display" "flex", style "flex-direction" "column", style "align-items" "center", style "gap" "0.3rem", style "flex" "1" ]
+                [ div
+                    [ style "position" "relative"
+                    , style "width" "100%"
+                    , style "height" (String.fromFloat chartH ++ "px")
+                    ]
+                    [ div
+                        [ style "position" "absolute"
+                        , style "left" "0", style "right" "0"
+                        , style "top" (String.fromFloat halfH ++ "px")
+                        , style "border-top" "1px solid #ccc"
+                        ]
+                        []
+                    , div
+                        [ style "position" "absolute"
+                        , style "left" "50%"
+                        , style "transform" "translateX(-50%)"
+                        , style "width" "18px"
+                        , style "height" (String.fromFloat h ++ "px")
+                        , style "background" colour
+                        , if v >= 0 then
+                            style "top" (String.fromFloat (halfH - h) ++ "px")
+                          else
+                            style "top" (String.fromFloat halfH ++ "px")
+                        ]
+                        []
+                    ]
+                , div [ style "font-size" "0.72rem", style "color" "#666" ] [ text label ]
+                ]
+
+        yLabel v top =
+            div
+                [ style "position" "absolute"
+                , style "right" "0.5rem"
+                , style "top" (String.fromFloat top ++ "px")
+                , style "font-size" "0.7rem"
+                , style "color" "#888"
+                , style "transform" "translateY(-50%)"
+                , style "white-space" "nowrap"
+                ]
+                [ text ("£" ++ fmtMoney v) ]
+    in
+    div [ style "display" "flex", style "gap" "0.25rem", style "padding-left" "3.5rem", style "position" "relative" ]
+        [ div
+            [ style "position" "absolute"
+            , style "left" "0"
+            , style "width" "3.5rem"
+            , style "height" (String.fromFloat chartH ++ "px")
+            ]
+            [ yLabel extent 0
+            , yLabel 0 halfH
+            , yLabel (-extent) chartH
+            ]
+        , div [ style "display" "flex", style "flex" "1", style "gap" "0.25rem" ]
+            (List.map column values)
+        ]
+
+
+fmtMoney : Float -> String
+fmtMoney v =
+    let
+        rounded = toFloat (round (v * 100)) / 100
+    in
+    String.fromFloat rounded
 
 
 singleBarChart : List MonthlyRow -> (MonthlyRow -> Float) -> String -> Float -> Html Msg
@@ -1747,6 +1961,11 @@ inputsPanel m =
             , inputRow "Home battery" "kWh" m.batteryKwh SetBatteryKwh "0" "1"
             ]
         , pvSection m
+        , inputSection "Tariffs"
+            [ inputRow "Day rate"    "p/kWh" m.dayRate    SetDayRate    "0" "1"
+            , inputRow "Night rate"  "p/kWh" m.nightRate  SetNightRate  "0" "1"
+            , inputRow "Export rate" "p/kWh" m.exportRate SetExportRate "0" "1"
+            ]
         ]
 
 
@@ -2043,8 +2262,20 @@ resultsPanel model maybeR =
                             annualHouseholdKwh = sumOver (\row -> row.dayHouseholdKwh + row.nightHouseholdKwh)
                             annualDhwElec = sumOver (\row -> row.dayDhwKwh + row.nightDhwKwh)
                             annualBatteryKwh = sumOver (\row -> row.batteryDayDischargeKwh + row.batteryNightDischargeKwh)
+                            tariffs = readTariffs model
+                            costRows = List.map (\row -> ( row, costForRow tariffs row )) rows
+                            annualDayImport   = costRows |> List.map (\( row, c ) -> c.dayImportKwh   * row.daysInMonth) |> List.sum
+                            annualNightImport = costRows |> List.map (\( row, c ) -> c.nightImportKwh * row.daysInMonth) |> List.sum
+                            annualExport      = costRows |> List.map (\( row, c ) -> c.exportKwh      * row.daysInMonth) |> List.sum
+                            annualDayCost      = annualDayImport   * tariffs.dayRate    / 100
+                            annualNightCost    = annualNightImport * tariffs.nightRate  / 100
+                            annualExportCredit = annualExport      * tariffs.exportRate / 100
+                            annualNetCost      = annualDayCost + annualNightCost - annualExportCredit
                         in
-                        runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualDhwElec annualBatteryKwh
+                        div []
+                            [ runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annualDhwElec annualBatteryKwh
+                            , costCard annualDayImport annualNightImport annualExport annualDayCost annualNightCost annualExportCredit annualNetCost
+                            ]
 
                     Nothing ->
                         text ""
@@ -2175,6 +2406,37 @@ runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annual
         , detailRow "Electricity (total)"     (String.fromInt (round totalElec))          "kWh/yr"
         , hr [ style "border" "none", style "border-top" "1px solid #dde3f0", style "margin" "0.4rem 0" ] []
         , detailRow "Battery throughput" (String.fromInt (round annualBatteryKwh)) "kWh/yr"
+        ]
+
+
+costCard : Float -> Float -> Float -> Float -> Float -> Float -> Float -> Html Msg
+costCard dayImport nightImport export dayCost nightCost exportCredit netCost =
+    card "#f5f7ff" "Annual Cost"
+        [ detailRow "Day import"   (String.fromInt (round dayImport))   "kWh/yr"
+        , detailRow "Night import" (String.fromInt (round nightImport)) "kWh/yr"
+        , detailRow "PV export"    (String.fromInt (round export))      "kWh/yr"
+        , hr [ style "border" "none", style "border-top" "1px solid #dde3f0", style "margin" "0.4rem 0" ] []
+        , detailRow "Day cost"      ("£" ++ fmtMoney dayCost)             ""
+        , detailRow "Night cost"    ("£" ++ fmtMoney nightCost)           ""
+        , detailRow "Export credit" ("−£" ++ fmtMoney exportCredit)       ""
+        , hr [ style "border" "none", style "border-top" "2px solid #1a1a2e", style "margin" "0.6rem 0" ] []
+        , div
+            [ style "display" "flex"
+            , style "justify-content" "space-between"
+            , style "align-items" "baseline"
+            ]
+            [ span [ style "font-weight" "700", style "font-size" "0.95rem" ] [ text "Net annual cost" ]
+            , div
+                [ style "font-size" "1.5rem"
+                , style "font-weight" "700"
+                , style "color" (if netCost >= 0 then "#1a1a2e" else "#2e7d32")
+                ]
+                [ text
+                    ((if netCost < 0 then "−£" else "£")
+                        ++ fmtMoney (Basics.abs netCost)
+                    )
+                ]
+            ]
         ]
 
 

@@ -5204,7 +5204,7 @@ var $author$project$Main$Slight = {$: 'Slight'};
 var $author$project$Main$South = {$: 'South'};
 var $author$project$Main$Tile = {$: 'Tile'};
 var $author$project$Main$VaultedRoof = {$: 'VaultedRoof'};
-var $author$project$Main$defaultModel = {ach: '0.5', annualDhwKwh: '2500', batteryKwh: '5', emitterDeltaT: '5', evMilesPerYear: '8000', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', gValue: '0.6', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', householdElecKwh: '3500', n50: '3', n50Method: $author$project$Main$SAP2012, numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, summerTempOut: '28', tempIn: '21', tempOut: '-3', thermalMass: $author$project$Main$MediumMass, totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
+var $author$project$Main$defaultModel = {ach: '0.5', annualDhwKwh: '2500', batteryKwh: '5', dayRate: '27', emitterDeltaT: '5', evMilesPerYear: '8000', exportRate: '15', floorCovering: $author$project$Main$Tile, floorHeight: '2.5', floorU: '0.13', flowTemp: '35', gValue: '0.6', glazingPct: '20', glazingU: '1.4', hdd: '2200', heatedFloorArea: '120', householdElecKwh: '3500', n50: '3', n50Method: $author$project$Main$SAP2012, nightRate: '7', numFloors: '2.5', pitchAngle: '35', pvIrradiation: '990', pvKwp: '4', pvOrientation: $author$project$Main$South, roofType: $author$project$Main$VaultedRoof, roofU: '0.13', shelterFactor: $author$project$Main$Slight, summerTempOut: '28', tempIn: '21', tempOut: '-3', thermalMass: $author$project$Main$MediumMass, totalFloorArea: '300', ventMode: $author$project$Main$FromN50, wallU: '0.14', yFactor: '0.08'};
 var $author$project$Main$Carpet = {$: 'Carpet'};
 var $author$project$Main$Wood = {$: 'Wood'};
 var $elm$core$Basics$round = _Basics_round;
@@ -5478,8 +5478,10 @@ var $author$project$Main$decodeParams = function (floats) {
 		ach: A2(getS, 12, d.ach),
 		annualDhwKwh: A2(getS, 32, d.annualDhwKwh),
 		batteryKwh: A2(getS, 31, d.batteryKwh),
+		dayRate: A2(getS, 33, d.dayRate),
 		emitterDeltaT: A2(getS, 21, d.emitterDeltaT),
 		evMilesPerYear: A2(getS, 30, d.evMilesPerYear),
+		exportRate: A2(getS, 35, d.exportRate),
 		floorCovering: $author$project$Main$floorCoveringFromF(
 			A2(
 				getF,
@@ -5500,6 +5502,7 @@ var $author$project$Main$decodeParams = function (floats) {
 				getF,
 				14,
 				$author$project$Main$n50MethodToF(d.n50Method))),
+		nightRate: A2(getS, 34, d.nightRate),
 		numFloors: A2(getS, 1, d.numFloors),
 		pitchAngle: A2(getS, 4, d.pitchAngle),
 		pvIrradiation: A2(getS, 24, d.pvIrradiation),
@@ -5601,7 +5604,10 @@ var $author$project$Main$encodeParams = function (m) {
 			$author$project$Main$toF(m.householdElecKwh),
 			$author$project$Main$toF(m.evMilesPerYear),
 			$author$project$Main$toF(m.batteryKwh),
-			$author$project$Main$toF(m.annualDhwKwh)
+			$author$project$Main$toF(m.annualDhwKwh),
+			$author$project$Main$toF(m.dayRate),
+			$author$project$Main$toF(m.nightRate),
+			$author$project$Main$toF(m.exportRate)
 		]);
 };
 var $elm$json$Json$Encode$float = _Json_wrap;
@@ -5780,11 +5786,26 @@ var $author$project$Main$updateField = F2(
 				return _Utils_update(
 					model,
 					{batteryKwh: v});
-			default:
+			case 'SetAnnualDhwKwh':
 				var v = msg.a;
 				return _Utils_update(
 					model,
 					{annualDhwKwh: v});
+			case 'SetDayRate':
+				var v = msg.a;
+				return _Utils_update(
+					model,
+					{dayRate: v});
+			case 'SetNightRate':
+				var v = msg.a;
+				return _Utils_update(
+					model,
+					{nightRate: v});
+			default:
+				var v = msg.a;
+				return _Utils_update(
+					model,
+					{exportRate: v});
 		}
 	});
 var $author$project$Main$update = F2(
@@ -5983,8 +6004,14 @@ var $author$project$Main$SetAnnualDhwKwh = function (a) {
 var $author$project$Main$SetBatteryKwh = function (a) {
 	return {$: 'SetBatteryKwh', a: a};
 };
+var $author$project$Main$SetDayRate = function (a) {
+	return {$: 'SetDayRate', a: a};
+};
 var $author$project$Main$SetEvMilesPerYear = function (a) {
 	return {$: 'SetEvMilesPerYear', a: a};
+};
+var $author$project$Main$SetExportRate = function (a) {
+	return {$: 'SetExportRate', a: a};
 };
 var $author$project$Main$SetFloorHeight = function (a) {
 	return {$: 'SetFloorHeight', a: a};
@@ -6006,6 +6033,9 @@ var $author$project$Main$SetHDD = function (a) {
 };
 var $author$project$Main$SetHouseholdElecKwh = function (a) {
 	return {$: 'SetHouseholdElecKwh', a: a};
+};
+var $author$project$Main$SetNightRate = function (a) {
+	return {$: 'SetNightRate', a: a};
 };
 var $author$project$Main$SetNumFloors = function (a) {
 	return {$: 'SetNumFloors', a: a};
@@ -6839,7 +6869,16 @@ var $author$project$Main$inputsPanel = function (m) {
 						A6($author$project$Main$inputRow, 'EV mileage', 'mi/yr', m.evMilesPerYear, $author$project$Main$SetEvMilesPerYear, '0', '500'),
 						A6($author$project$Main$inputRow, 'Home battery', 'kWh', m.batteryKwh, $author$project$Main$SetBatteryKwh, '0', '1')
 					])),
-				$author$project$Main$pvSection(m)
+				$author$project$Main$pvSection(m),
+				A2(
+				$author$project$Main$inputSection,
+				'Tariffs',
+				_List_fromArray(
+					[
+						A6($author$project$Main$inputRow, 'Day rate', 'p/kWh', m.dayRate, $author$project$Main$SetDayRate, '0', '1'),
+						A6($author$project$Main$inputRow, 'Night rate', 'p/kWh', m.nightRate, $author$project$Main$SetNightRate, '0', '1'),
+						A6($author$project$Main$inputRow, 'Export rate', 'p/kWh', m.exportRate, $author$project$Main$SetExportRate, '0', '1')
+					]))
 			]));
 };
 var $author$project$Main$performanceRatio = 0.80;
@@ -7324,6 +7363,276 @@ var $author$project$Main$coolingChartSection = function (rows) {
 				maxC)
 			]));
 };
+var $elm$core$Basics$min = F2(
+	function (x, y) {
+		return (_Utils_cmp(x, y) < 0) ? x : y;
+	});
+var $author$project$Main$costForRow = F2(
+	function (t, row) {
+		var nightDemand = (((row.nightHpKwh + row.nightCoolKwh) + row.nightHouseholdKwh) + row.nightEvKwh) + row.nightDhwKwh;
+		var nightImport = A2($elm$core$Basics$max, 0, nightDemand - row.batteryNightDischargeKwh) + row.nightChargeFromGridKwh;
+		var nightCost = (nightImport * t.nightRate) / 100;
+		var dayDemand = (((row.dayHpKwh + row.dayCoolKwh) + row.dayHouseholdKwh) + row.dayEvKwh) + row.dayDhwKwh;
+		var pvUsedByDay = A2($elm$core$Basics$min, row.pvKwh, dayDemand);
+		var dayImport = A2($elm$core$Basics$max, 0, (dayDemand - pvUsedByDay) - row.batteryDayDischargeKwh);
+		var _export = A2($elm$core$Basics$max, 0, (row.pvKwh - pvUsedByDay) - row.batteryNightDischargeKwh);
+		var exportCredit = (_export * t.exportRate) / 100;
+		var dayCost = (dayImport * t.dayRate) / 100;
+		return {dayCost: dayCost, dayImportKwh: dayImport, exportCredit: exportCredit, exportKwh: _export, netCost: (dayCost + nightCost) - exportCredit, nightCost: nightCost, nightImportKwh: nightImport};
+	});
+var $elm$core$List$minimum = function (list) {
+	if (list.b) {
+		var x = list.a;
+		var xs = list.b;
+		return $elm$core$Maybe$Just(
+			A3($elm$core$List$foldl, $elm$core$Basics$min, x, xs));
+	} else {
+		return $elm$core$Maybe$Nothing;
+	}
+};
+var $author$project$Main$sectionHeading = function (label) {
+	return A2(
+		$elm$html$Html$p,
+		_List_fromArray(
+			[
+				A2($elm$html$Html$Attributes$style, 'font-size', '0.72rem'),
+				A2($elm$html$Html$Attributes$style, 'font-weight', '600'),
+				A2($elm$html$Html$Attributes$style, 'text-transform', 'uppercase'),
+				A2($elm$html$Html$Attributes$style, 'letter-spacing', '0.08em'),
+				A2($elm$html$Html$Attributes$style, 'color', '#888'),
+				A2($elm$html$Html$Attributes$style, 'margin-bottom', '0.5rem')
+			]),
+		_List_fromArray(
+			[
+				$elm$html$Html$text(label)
+			]));
+};
+var $author$project$Main$fmtMoney = function (v) {
+	var rounded = $elm$core$Basics$round(v * 100) / 100;
+	return $elm$core$String$fromFloat(rounded);
+};
+var $author$project$Main$signedBarChart = F2(
+	function (values, extent) {
+		var yLabel = F2(
+			function (v, top) {
+				return A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+							A2($elm$html$Html$Attributes$style, 'right', '0.5rem'),
+							A2(
+							$elm$html$Html$Attributes$style,
+							'top',
+							$elm$core$String$fromFloat(top) + 'px'),
+							A2($elm$html$Html$Attributes$style, 'font-size', '0.7rem'),
+							A2($elm$html$Html$Attributes$style, 'color', '#888'),
+							A2($elm$html$Html$Attributes$style, 'transform', 'translateY(-50%)'),
+							A2($elm$html$Html$Attributes$style, 'white-space', 'nowrap')
+						]),
+					_List_fromArray(
+						[
+							$elm$html$Html$text(
+							'£' + $author$project$Main$fmtMoney(v))
+						]));
+			});
+		var halfH = 90.0;
+		var chartH = halfH * 2;
+		var column = function (_v0) {
+			var label = _v0.a;
+			var v = _v0.b;
+			var h = ($elm$core$Basics$abs(v) * halfH) / extent;
+			var colour = (v >= 0) ? '#c23b3b' : '#2e7d32';
+			return A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+						A2($elm$html$Html$Attributes$style, 'flex-direction', 'column'),
+						A2($elm$html$Html$Attributes$style, 'align-items', 'center'),
+						A2($elm$html$Html$Attributes$style, 'gap', '0.3rem'),
+						A2($elm$html$Html$Attributes$style, 'flex', '1')
+					]),
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'position', 'relative'),
+								A2($elm$html$Html$Attributes$style, 'width', '100%'),
+								A2(
+								$elm$html$Html$Attributes$style,
+								'height',
+								$elm$core$String$fromFloat(chartH) + 'px')
+							]),
+						_List_fromArray(
+							[
+								A2(
+								$elm$html$Html$div,
+								_List_fromArray(
+									[
+										A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+										A2($elm$html$Html$Attributes$style, 'left', '0'),
+										A2($elm$html$Html$Attributes$style, 'right', '0'),
+										A2(
+										$elm$html$Html$Attributes$style,
+										'top',
+										$elm$core$String$fromFloat(halfH) + 'px'),
+										A2($elm$html$Html$Attributes$style, 'border-top', '1px solid #ccc')
+									]),
+								_List_Nil),
+								A2(
+								$elm$html$Html$div,
+								_List_fromArray(
+									[
+										A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+										A2($elm$html$Html$Attributes$style, 'left', '50%'),
+										A2($elm$html$Html$Attributes$style, 'transform', 'translateX(-50%)'),
+										A2($elm$html$Html$Attributes$style, 'width', '18px'),
+										A2(
+										$elm$html$Html$Attributes$style,
+										'height',
+										$elm$core$String$fromFloat(h) + 'px'),
+										A2($elm$html$Html$Attributes$style, 'background', colour),
+										(v >= 0) ? A2(
+										$elm$html$Html$Attributes$style,
+										'top',
+										$elm$core$String$fromFloat(halfH - h) + 'px') : A2(
+										$elm$html$Html$Attributes$style,
+										'top',
+										$elm$core$String$fromFloat(halfH) + 'px')
+									]),
+								_List_Nil)
+							])),
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								A2($elm$html$Html$Attributes$style, 'font-size', '0.72rem'),
+								A2($elm$html$Html$Attributes$style, 'color', '#666')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text(label)
+							]))
+					]));
+		};
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+					A2($elm$html$Html$Attributes$style, 'gap', '0.25rem'),
+					A2($elm$html$Html$Attributes$style, 'padding-left', '3.5rem'),
+					A2($elm$html$Html$Attributes$style, 'position', 'relative')
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'position', 'absolute'),
+							A2($elm$html$Html$Attributes$style, 'left', '0'),
+							A2($elm$html$Html$Attributes$style, 'width', '3.5rem'),
+							A2(
+							$elm$html$Html$Attributes$style,
+							'height',
+							$elm$core$String$fromFloat(chartH) + 'px')
+						]),
+					_List_fromArray(
+						[
+							A2(yLabel, extent, 0),
+							A2(yLabel, 0, halfH),
+							A2(yLabel, -extent, chartH)
+						])),
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+							A2($elm$html$Html$Attributes$style, 'flex', '1'),
+							A2($elm$html$Html$Attributes$style, 'gap', '0.25rem')
+						]),
+					A2($elm$core$List$map, column, values))
+				]));
+	});
+var $author$project$Main$costChartSection = F2(
+	function (rows, tariffs) {
+		var monthly = A2(
+			$elm$core$List$map,
+			function (r) {
+				return _Utils_Tuple2(
+					r,
+					A2($author$project$Main$costForRow, tariffs, r));
+			},
+			rows);
+		var monthCost = function (_v0) {
+			var r = _v0.a;
+			var c = _v0.b;
+			return c.netCost * r.daysInMonth;
+		};
+		var monthCosts = A2($elm$core$List$map, monthCost, monthly);
+		var minNeg = A2(
+			$elm$core$Basics$min,
+			0,
+			A2(
+				$elm$core$Maybe$withDefault,
+				0,
+				$elm$core$List$minimum(monthCosts)));
+		var maxPos = A2(
+			$elm$core$Basics$max,
+			0,
+			A2(
+				$elm$core$Maybe$withDefault,
+				0,
+				$elm$core$List$maximum(monthCosts)));
+		var extent = A2(
+			$elm$core$Basics$max,
+			1,
+			A2(
+				$elm$core$Basics$max,
+				maxPos,
+				$elm$core$Basics$abs(minNeg)));
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					A2($elm$html$Html$Attributes$style, 'margin-top', '1.5rem')
+				]),
+			_List_fromArray(
+				[
+					$author$project$Main$sectionHeading('Monthly — Running Cost'),
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+							A2($elm$html$Html$Attributes$style, 'gap', '1rem'),
+							A2($elm$html$Html$Attributes$style, 'flex-wrap', 'wrap'),
+							A2($elm$html$Html$Attributes$style, 'font-size', '0.78rem'),
+							A2($elm$html$Html$Attributes$style, 'color', '#555'),
+							A2($elm$html$Html$Attributes$style, 'margin-bottom', '0.75rem')
+						]),
+					_List_fromArray(
+						[
+							A2($author$project$Main$legendSwatch, '#c23b3b', 'Net cost (import − export)'),
+							A2($author$project$Main$legendSwatch, '#2e7d32', 'Net credit')
+						])),
+					A2(
+					$author$project$Main$signedBarChart,
+					A3(
+						$elm$core$List$map2,
+						F2(
+							function (r, c) {
+								return _Utils_Tuple2(r.month, c);
+							}),
+						rows,
+						monthCosts),
+					extent)
+				]));
+	});
 var $author$project$Main$dayNightChart = F3(
 	function (rows, maxVal, isDay) {
 		var supplyAndDemand = function (row) {
@@ -7736,10 +8045,6 @@ var $author$project$Main$internalGainDayFrac = 0.6;
 var $author$project$Main$internalGainsWperM2 = 4;
 var $elm$core$List$map3 = _List_map3;
 var $elm$core$List$map5 = _List_map5;
-var $elm$core$Basics$min = F2(
-	function (x, y) {
-		return (_Utils_cmp(x, y) < 0) ? x : y;
-	});
 var $author$project$Main$monthNames = _List_fromArray(
 	['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']);
 var $author$project$Main$monthlyAvgTempC = _List_fromArray(
@@ -7837,6 +8142,37 @@ var $author$project$Main$monthlyBreakdown = F4(
 			$author$project$Main$daysInMonth,
 			$author$project$Main$monthlyAvgTempC);
 	});
+var $author$project$Main$readTariffs = function (m) {
+	return {
+		dayRate: A2(
+			$elm$core$Maybe$withDefault,
+			0,
+			$elm$core$String$toFloat(m.dayRate)),
+		exportRate: A2(
+			$elm$core$Maybe$withDefault,
+			0,
+			$elm$core$String$toFloat(m.exportRate)),
+		nightRate: A2(
+			$elm$core$Maybe$withDefault,
+			0,
+			$elm$core$String$toFloat(m.nightRate))
+	};
+};
+var $author$project$Main$subHeading = function (label) {
+	return A2(
+		$elm$html$Html$p,
+		_List_fromArray(
+			[
+				A2($elm$html$Html$Attributes$style, 'font-size', '0.8rem'),
+				A2($elm$html$Html$Attributes$style, 'font-weight', '600'),
+				A2($elm$html$Html$Attributes$style, 'color', '#1a1a2e'),
+				A2($elm$html$Html$Attributes$style, 'margin', '1rem 0 0.5rem')
+			]),
+		_List_fromArray(
+			[
+				$elm$html$Html$text(label)
+			]));
+};
 var $author$project$Main$monthlyChartSection = F2(
 	function (model, maybeR) {
 		var _v0 = A2(
@@ -7862,6 +8198,7 @@ var $author$project$Main$monthlyChartSection = F2(
 			var r = _v1.a;
 			var u = _v1.b;
 			var pv = _v1.c;
+			var tariffs = $author$project$Main$readTariffs(model);
 			var rows = A4($author$project$Main$monthlyBreakdown, model, r, u, pv);
 			var maxVal = function () {
 				var nightSupply = function (m) {
@@ -7908,48 +8245,13 @@ var $author$project$Main$monthlyChartSection = F2(
 					]),
 				_List_fromArray(
 					[
-						A2(
-						$elm$html$Html$p,
-						_List_fromArray(
-							[
-								A2($elm$html$Html$Attributes$style, 'font-size', '0.72rem'),
-								A2($elm$html$Html$Attributes$style, 'font-weight', '600'),
-								A2($elm$html$Html$Attributes$style, 'text-transform', 'uppercase'),
-								A2($elm$html$Html$Attributes$style, 'letter-spacing', '0.08em'),
-								A2($elm$html$Html$Attributes$style, 'color', '#888'),
-								A2($elm$html$Html$Attributes$style, 'margin-bottom', '0.5rem')
-							]),
-						_List_fromArray(
-							[
-								$elm$html$Html$text('Monthly — Heat Pump Electricity vs Solar PV')
-							])),
+						$author$project$Main$sectionHeading('Monthly — Electricity Supply & Demand'),
 						$author$project$Main$chartLegend,
-						A2(
-						$elm$html$Html$p,
-						_List_fromArray(
-							[
-								A2($elm$html$Html$Attributes$style, 'font-size', '0.7rem'),
-								A2($elm$html$Html$Attributes$style, 'color', '#888'),
-								A2($elm$html$Html$Attributes$style, 'margin', '0.5rem 0 0.25rem')
-							]),
-						_List_fromArray(
-							[
-								$elm$html$Html$text('Day (during daylight hours)')
-							])),
+						$author$project$Main$subHeading('Day (during daylight hours)'),
 						A3($author$project$Main$dayNightChart, rows, maxVal, true),
-						A2(
-						$elm$html$Html$p,
-						_List_fromArray(
-							[
-								A2($elm$html$Html$Attributes$style, 'font-size', '0.7rem'),
-								A2($elm$html$Html$Attributes$style, 'color', '#888'),
-								A2($elm$html$Html$Attributes$style, 'margin', '1rem 0 0.25rem')
-							]),
-						_List_fromArray(
-							[
-								$elm$html$Html$text('Night')
-							])),
+						$author$project$Main$subHeading('Night'),
 						A3($author$project$Main$dayNightChart, rows, maxVal, false),
+						A2($author$project$Main$costChartSection, rows, tariffs),
 						$author$project$Main$heatChartSection(rows),
 						$author$project$Main$coolingChartSection(rows)
 					]));
@@ -8194,6 +8496,108 @@ var $author$project$Main$coolingCard = function (c) {
 					]))
 			]));
 };
+var $author$project$Main$costCard = F7(
+	function (dayImport, nightImport, _export, dayCost, nightCost, exportCredit, netCost) {
+		return A3(
+			$author$project$Main$card,
+			'#f5f7ff',
+			'Annual Cost',
+			_List_fromArray(
+				[
+					A3(
+					$author$project$Main$detailRow,
+					'Day import',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(dayImport)),
+					'kWh/yr'),
+					A3(
+					$author$project$Main$detailRow,
+					'Night import',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(nightImport)),
+					'kWh/yr'),
+					A3(
+					$author$project$Main$detailRow,
+					'PV export',
+					$elm$core$String$fromInt(
+						$elm$core$Basics$round(_export)),
+					'kWh/yr'),
+					A2(
+					$elm$html$Html$hr,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'border', 'none'),
+							A2($elm$html$Html$Attributes$style, 'border-top', '1px solid #dde3f0'),
+							A2($elm$html$Html$Attributes$style, 'margin', '0.4rem 0')
+						]),
+					_List_Nil),
+					A3(
+					$author$project$Main$detailRow,
+					'Day cost',
+					'£' + $author$project$Main$fmtMoney(dayCost),
+					''),
+					A3(
+					$author$project$Main$detailRow,
+					'Night cost',
+					'£' + $author$project$Main$fmtMoney(nightCost),
+					''),
+					A3(
+					$author$project$Main$detailRow,
+					'Export credit',
+					'−£' + $author$project$Main$fmtMoney(exportCredit),
+					''),
+					A2(
+					$elm$html$Html$hr,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'border', 'none'),
+							A2($elm$html$Html$Attributes$style, 'border-top', '2px solid #1a1a2e'),
+							A2($elm$html$Html$Attributes$style, 'margin', '0.6rem 0')
+						]),
+					_List_Nil),
+					A2(
+					$elm$html$Html$div,
+					_List_fromArray(
+						[
+							A2($elm$html$Html$Attributes$style, 'display', 'flex'),
+							A2($elm$html$Html$Attributes$style, 'justify-content', 'space-between'),
+							A2($elm$html$Html$Attributes$style, 'align-items', 'baseline')
+						]),
+					_List_fromArray(
+						[
+							A2(
+							$elm$html$Html$span,
+							_List_fromArray(
+								[
+									A2($elm$html$Html$Attributes$style, 'font-weight', '700'),
+									A2($elm$html$Html$Attributes$style, 'font-size', '0.95rem')
+								]),
+							_List_fromArray(
+								[
+									$elm$html$Html$text('Net annual cost')
+								])),
+							A2(
+							$elm$html$Html$div,
+							_List_fromArray(
+								[
+									A2($elm$html$Html$Attributes$style, 'font-size', '1.5rem'),
+									A2($elm$html$Html$Attributes$style, 'font-weight', '700'),
+									A2(
+									$elm$html$Html$Attributes$style,
+									'color',
+									(netCost >= 0) ? '#1a1a2e' : '#2e7d32')
+								]),
+							_List_fromArray(
+								[
+									$elm$html$Html$text(
+									_Utils_ap(
+										(netCost < 0) ? '−£' : '£',
+										$author$project$Main$fmtMoney(
+											$elm$core$Basics$abs(netCost))))
+								]))
+						]))
+				]));
+	});
 var $author$project$Main$geometryCard = F2(
 	function (model, r) {
 		return A3(
@@ -8792,6 +9196,7 @@ var $author$project$Main$resultsPanel = F2(
 							var _v4 = _v3.a;
 							var u = _v4.a;
 							var pv = _v4.b;
+							var tariffs = $author$project$Main$readTariffs(model);
 							var rows = A4($author$project$Main$monthlyBreakdown, model, r, u, pv);
 							var sumOver = function (f) {
 								return $elm$core$List$sum(
@@ -8802,10 +9207,38 @@ var $author$project$Main$resultsPanel = F2(
 										},
 										rows));
 							};
+							var costRows = A2(
+								$elm$core$List$map,
+								function (row) {
+									return _Utils_Tuple2(
+										row,
+										A2($author$project$Main$costForRow, tariffs, row));
+								},
+								rows);
+							var annualNightImport = $elm$core$List$sum(
+								A2(
+									$elm$core$List$map,
+									function (_v7) {
+										var row = _v7.a;
+										var c = _v7.b;
+										return c.nightImportKwh * row.daysInMonth;
+									},
+									costRows));
+							var annualNightCost = (annualNightImport * tariffs.nightRate) / 100;
 							var annualHouseholdKwh = sumOver(
 								function (row) {
 									return row.dayHouseholdKwh + row.nightHouseholdKwh;
 								});
+							var annualExport = $elm$core$List$sum(
+								A2(
+									$elm$core$List$map,
+									function (_v6) {
+										var row = _v6.a;
+										var c = _v6.b;
+										return c.exportKwh * row.daysInMonth;
+									},
+									costRows));
+							var annualExportCredit = (annualExport * tariffs.exportRate) / 100;
 							var annualEvKwh = sumOver(
 								function (row) {
 									return row.dayEvKwh + row.nightEvKwh;
@@ -8814,6 +9247,17 @@ var $author$project$Main$resultsPanel = F2(
 								function (row) {
 									return row.dayDhwKwh + row.nightDhwKwh;
 								});
+							var annualDayImport = $elm$core$List$sum(
+								A2(
+									$elm$core$List$map,
+									function (_v5) {
+										var row = _v5.a;
+										var c = _v5.b;
+										return c.dayImportKwh * row.daysInMonth;
+									},
+									costRows));
+							var annualDayCost = (annualDayImport * tariffs.dayRate) / 100;
+							var annualNetCost = (annualDayCost + annualNightCost) - annualExportCredit;
 							var annualCoolKwh = sumOver(
 								function ($) {
 									return $.coolingKwh;
@@ -8826,18 +9270,25 @@ var $author$project$Main$resultsPanel = F2(
 								function (row) {
 									return row.batteryDayDischargeKwh + row.batteryNightDischargeKwh;
 								});
-							return A7($author$project$Main$runningCard, u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh, annualDhwElec, annualBatteryKwh);
+							return A2(
+								$elm$html$Html$div,
+								_List_Nil,
+								_List_fromArray(
+									[
+										A7($author$project$Main$runningCard, u, annualCoolKwh, annualCoolElec, annualHouseholdKwh, annualEvKwh, annualDhwElec, annualBatteryKwh),
+										A7($author$project$Main$costCard, annualDayImport, annualNightImport, annualExport, annualDayCost, annualNightCost, annualExportCredit, annualNetCost)
+									]));
 						} else {
 							return $elm$html$Html$text('');
 						}
 					}(),
 						function () {
-						var _v5 = A2(
+						var _v8 = A2(
 							$elm$core$Maybe$andThen,
 							$author$project$Main$calculatePv(model),
 							A2($author$project$Main$calculateUFH, model, r));
-						if (_v5.$ === 'Just') {
-							var p = _v5.a;
+						if (_v8.$ === 'Just') {
+							var p = _v8.a;
 							return A2($author$project$Main$pvCard, model, p);
 						} else {
 							return $elm$html$Html$text('');
