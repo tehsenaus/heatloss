@@ -894,6 +894,9 @@ type alias UFHResults =
     , annualExcessGain : Float     -- gain − useful (potential cooling load)
     , annualNetHeatKwh : Float     -- gross − useful
     , annualElecKwh    : Float     -- net / scop
+    , effectiveHdd     : Float     -- user HDD scaled to setpoint
+    , hddFractions     : List Float -- monthly HDD fractions at setpoint
+    , annualInternalGain : Float   -- kWh/yr from internal gains (people, appliances)
     }
 
 
@@ -936,6 +939,7 @@ calculateUFH m r =
     String.toFloat m.tempIn          |> Maybe.andThen (\ti ->
     String.toFloat m.tempOut         |> Maybe.andThen (\to_ ->
     String.toFloat m.gValue          |> Maybe.andThen (\gVal ->
+    String.toFloat m.totalFloorArea  |> Maybe.andThen (\tfa ->
     String.toFloat m.pvIrradiation   |> Maybe.map     (\horizIrr ->
         let
             k              = floorCoeff m.floorCovering
@@ -961,34 +965,60 @@ calculateUFH m r =
             specHeatLoss =
                 if r.deltaT > 0 then r.qTotal / r.deltaT else 0
 
-            annualHeatKwh = specHeatLoss * hdd_ * 24 / 1000
+            -- User enters HDD at the CIBSE base (15.5°C) — a climate
+            -- lookup for their location. We rescale to the setpoint using
+            -- the monthly-mean temperatures, keeping HDD consistent with
+            -- the setpoint input instead of a separate knob. Internal
+            -- gains are handled below as a separate utilisation input,
+            -- not via a base-temp offset — avoids double-counting solar.
+            hddCibse     = hddAtBase cibseHddBase
+            hddSetpoint  = hddAtBase ti
+            hddScale     = if hddCibse > 0 then hddSetpoint / hddCibse else 1
+            effectiveHdd = hdd_ * hddScale
+
+            annualHeatKwh = specHeatLoss * effectiveHdd * 24 / 1000
+
+            monthlyHddFractions = hddFractionsAtBase ti
 
             -- Solar gain through glazing (annual)
             annualSolarGain =
                 r.glazingArea * gVal * horizIrr * glazingVertFactor
 
+            -- Internal gains (people, appliances, DHW losses) — same
+            -- 4 W/m² used by the cooling calc, distributed by days.
+            annualInternalGain =
+                internalGainsWperM2 * tfa * 8760 / 1000
+
+            internalMonthly =
+                List.map (\d -> annualInternalGain * d / 365) daysInMonth
+
             -- ISO 13790 utilisation factor: η × gain ≤ demand naturally,
-            -- and excess (= gain − useful) is the potential cooling load.
+            -- and excess (= total gain − useful) represents gains the
+            -- heating system can't absorb (cooling-load potential in
+            -- summer, or spill in shoulder months).
             tau = thermalMassTau m.thermalMass
 
             monthlyUseful =
-                List.map2
-                    (\hf pf ->
+                List.map3
+                    (\hf pf internal ->
                         let
                             grossHeat = annualHeatKwh * hf
-                            gain      = annualSolarGain * pf
+                            gain      = annualSolarGain * pf + internal
                         in
                         if grossHeat < 0.001 then
                             0
 
                         else
-                            utilisationFactor (gain / grossHeat) tau * gain
+                            Basics.min grossHeat
+                                (utilisationFactor (gain / grossHeat) tau * gain)
                     )
-                    hddFractions
+                    monthlyHddFractions
                     pvFractions
+                    internalMonthly
 
+            annualTotalGain  = annualSolarGain + annualInternalGain
             annualUsefulGain = List.sum monthlyUseful
-            annualExcessGain = Basics.max 0 (annualSolarGain - annualUsefulGain)
+            annualExcessGain = Basics.max 0 (annualTotalGain - annualUsefulGain)
             annualNetHeatKwh = Basics.max 0 (annualHeatKwh - annualUsefulGain)
             annualElecKwh    = if scop > 0 then annualNetHeatKwh / scop else 0
         in
@@ -1006,8 +1036,11 @@ calculateUFH m r =
         , annualExcessGain = annualExcessGain
         , annualNetHeatKwh = annualNetHeatKwh
         , annualElecKwh    = annualElecKwh
+        , effectiveHdd     = effectiveHdd
+        , hddFractions     = monthlyHddFractions
+        , annualInternalGain = annualInternalGain
         }
-    ))))))))
+    )))))))))
 
 
 
@@ -1151,10 +1184,32 @@ monthNames =
     [ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" ]
 
 
--- HDD fractions by month (UK typical, sums to 1.00)
-hddFractions : List Float
-hddFractions =
-    [ 0.16, 0.14, 0.12, 0.08, 0.05, 0.02, 0.01, 0.01, 0.04, 0.09, 0.12, 0.16 ]
+-- HDD integrated from monthly average temps at a given base temperature.
+-- Using monthly means underestimates true HDD (Jensen's inequality) but
+-- is good enough for a scaling factor.
+hddAtBase : Float -> Float
+hddAtBase base =
+    List.map2 (\t d -> Basics.max 0 (base - t) * d) monthlyAvgTempC daysInMonth
+        |> List.sum
+
+
+-- Monthly HDD fractions derived at a given base, summing to 1.
+hddFractionsAtBase : Float -> List Float
+hddFractionsAtBase base =
+    let
+        contribs = List.map2 (\t d -> Basics.max 0 (base - t) * d) monthlyAvgTempC daysInMonth
+        total = List.sum contribs
+    in
+    if total <= 0 then
+        List.repeat 12 (1 / 12)
+    else
+        List.map (\c -> c / total) contribs
+
+
+-- CIBSE standard UK base for published HDD values.
+cibseHddBase : Float
+cibseHddBase =
+    15.5
 
 
 -- PV generation fractions by month (UK south-facing, sums to 1.00)
@@ -1211,14 +1266,17 @@ monthlyBreakdown m r u pv =
     List.map5
         (\name ( hddF, pvF, dhwF ) dl days avgT ->
             let
-                grossHeat = u.annualHeatKwh * hddF
-                gain      = u.annualSolarGain * pvF
-                useful    =
+                grossHeat    = u.annualHeatKwh * hddF
+                solarGain    = u.annualSolarGain * pvF
+                internalGain = internalDaily * days
+                gain         = solarGain + internalGain
+                useful       =
                     if grossHeat < 0.001 then
                         0
 
                     else
-                        utilisationFactor (gain / grossHeat) tau * gain
+                        Basics.min grossHeat
+                            (utilisationFactor (gain / grossHeat) tau * gain)
 
                 netHeat = Basics.max 0 (grossHeat - useful)
                 netElec = if u.scop > 0 then netHeat / u.scop else 0
@@ -1236,8 +1294,13 @@ monthlyBreakdown m r u pv =
                 dayT   = avgT + diurnalSwing
                 nightT = avgT - diurnalSwing
 
-                -- All solar excess hits during daylight.
-                excessSolarDay = (gain - useful) / days
+                -- All solar excess hits during daylight. Split the total
+                -- unused gain by its solar share so we don't double-count
+                -- internal gains (which the cooling calc adds explicitly
+                -- via internalDay/internalNight below).
+                totalExcess    = Basics.max 0 (gain - useful)
+                solarShare     = if gain > 0 then solarGain / gain else 0
+                excessSolarDay = totalExcess * solarShare / days
                 internalDay    = internalDaily * internalGainDayFrac
                 internalNight  = internalDaily * (1 - internalGainDayFrac)
 
@@ -1306,9 +1369,9 @@ monthlyBreakdown m r u pv =
             in
             { month            = name
             , pvKwh            = pvDaily
-            , grossHeatKwh     = grossHeat / days
-            , solarGainKwh     = gain / days
-            , usefulGainKwh    = useful / days
+            , grossHeatKwh     = Basics.max 0 (grossHeat - internalGain) / days
+            , solarGainKwh     = solarGain / days
+            , usefulGainKwh    = Basics.clamp 0 solarGain (useful - internalGain) / days
             , coolingKwh       = coolingDaily
             , dayHpKwh         = hpDay
             , dayCoolKwh       = coolDayElec
@@ -1327,7 +1390,7 @@ monthlyBreakdown m r u pv =
             }
         )
         monthNames
-        (List.map3 (\a b c -> ( a, b, c )) hddFractions pvFractions dhwMonthlyFractions)
+        (List.map3 (\a b c -> ( a, b, c )) u.hddFractions pvFractions dhwMonthlyFractions)
         daylightHours
         daysInMonth
         monthlyAvgTempC
@@ -1434,7 +1497,8 @@ view model =
             , style "font-size" "0.9rem"
             , style "margin-bottom" "2rem"
             ]
-            [ text "Heat loss, cooling, heat pump, hot water, PV, battery, EV and tariffs. Assumes square floor plan." ]
+            [ text "Heat loss, cooling, heat pump, hot water, PV, battery, EV and tariffs." ]
+        , ukAssumptionsBox
         , div
             [ style "display" "grid"
             , style "grid-template-columns" "1fr 1fr"
@@ -1488,6 +1552,38 @@ monthlyChartSection model maybeR =
                 ]
 
 
+ukAssumptionsBox : Html Msg
+ukAssumptionsBox =
+    details
+        [ style "margin-bottom" "1.5rem"
+        , style "padding" "0.75rem 1rem"
+        , style "background" "#f5f7ff"
+        , style "border" "1px solid #dde3f0"
+        , style "border-radius" "8px"
+        , style "font-size" "0.82rem"
+        , style "color" "#444"
+        ]
+        [ summary
+            [ style "cursor" "pointer"
+            , style "font-weight" "600"
+            , style "color" "#1a1a2e"
+            ]
+            [ text "UK-specific assumptions (climate, tariffs, efficiencies)" ]
+        , ul [ style "margin" "0.6rem 0 0 0", style "padding-left" "1.2rem", style "line-height" "1.55" ]
+            [ li [] [ text "Monthly outdoor temperatures, daylight hours and PV generation fractions are UK typical (Met Office normals, ~52°N)." ]
+            , li [] [ text "HDD input is CIBSE-standard base 15.5 °C; the tool rescales it to your setpoint using monthly means. Internal gains (4 W/m², shared with the cooling calc) are applied separately via ISO 13790 utilisation." ]
+            , li [] [ text "Square floor plan assumed for fabric heat-loss geometry." ]
+            , li [] [ text "Peak horizontal irradiance estimated from annual horizontal irradiation; internal blinds (×0.6) assumed during peak cooling." ]
+            , li [] [ text "Self-shading factor 0.7 applied to vertical glazing for heating solar gain." ]
+            , li [] [ text "Heat pump SCOPs: space heating from flow temp (Carnot-derived); DHW 2.5; cooling 3.5." ]
+            , li [] [ text "Battery round-trip efficiency 90%; EV charging efficiency 90%." ]
+            , li [] [ text "EV energy use: 250 Wh/mi at 16.5 °C avg, 350 Wh/mi at 4.5 °C avg (linear)." ]
+            , li [] [ text "Tariff model: flat day/night rates + export tariff + daily standing charge (no Agile/Flux time-of-use pricing)." ]
+            , li [] [ text "Battery dispatch: single daily cycle; direct-from-PV priority is day load → EV → DHW → battery. In months with no PV surplus, battery is charged overnight off-peak and discharged in the day." ]
+            ]
+        ]
+
+
 sectionHeading : String -> Html Msg
 sectionHeading label =
     p
@@ -1530,7 +1626,7 @@ heatChartSection rows =
             , style "color" "#888"
             , style "margin-bottom" "0.5rem"
             ]
-            [ text "Monthly — Heat Demand vs Solar Gain (through glazing)" ]
+            [ text "Monthly — Heat Demand (net of internal gains) vs Solar Gain" ]
         , div
             [ style "display" "flex"
             , style "gap" "1rem"
@@ -1539,8 +1635,8 @@ heatChartSection rows =
             , style "color" "#555"
             , style "margin-bottom" "0.75rem"
             ]
-            [ legendSwatch "#c77700" "Gross heat demand"
-            , legendSwatch "#e6b800" "Solar gain (dark = useful)"
+            [ legendSwatch "#c77700" "Heat demand (net of internal gains)"
+            , legendSwatch "#e6b800" "Solar gain (dark = useful against heating)"
             ]
         , heatChart rows maxHeat
         ]
@@ -1829,10 +1925,9 @@ chartLegend =
         , style "color" "#555"
         , style "margin-bottom" "0.75rem"
         ]
-        [ legendSwatch "#2e7d32" "Day PV"
-        , legendSwatch "#d4a017" "Battery (summer: night discharge / winter: off-peak charge)"
-        , legendSwatch "#c77700" "HP heating (day)"
-        , legendSwatch "#6a4b8a" "HP heating (night)"
+        [ legendSwatch "#2e7d32" "PV"
+        , legendSwatch "#d4a017" "Battery"
+        , legendSwatch "#c77700" "HP heating"
         , legendSwatch "#b05577" "HP hot water"
         , legendSwatch "#3b82c4" "HP cooling"
         , legendSwatch "#888888" "Household"
@@ -1898,7 +1993,7 @@ dayNightChart rows maxVal isDay =
             else
                 ( [ ( row.batteryNightDischargeKwh, "#d4a017" )
                   ]
-                , [ ( row.nightHpKwh,            "#6a4b8a" )
+                , [ ( row.nightHpKwh,            "#c77700" )
                   , ( row.nightDhwKwh,           "#b05577" )
                   , ( row.nightCoolKwh,          "#3b82c4" )
                   , ( row.nightHouseholdKwh,     "#888888" )
@@ -1984,7 +2079,7 @@ inputsPanel m =
             ]
         , ufhSection m
         , inputSection "Annual Energy"
-            [ inputRow "Heating degree days" "°C·d" m.hdd SetHDD "0" "50"
+            [ inputRow "HDD (CIBSE, base 15.5 °C)" "°C·d" m.hdd SetHDD "0" "50"
             , inputRow "Hot water demand" "kWh/yr" m.annualDhwKwh SetAnnualDhwKwh "0" "100"
             ]
         , inputSection "Other Electricity"
@@ -2426,8 +2521,10 @@ runningCard u annualCoolKwh annualCoolElec annualHouseholdKwh annualEvKwh annual
         totalElec = u.annualElecKwh + annualCoolElec + annualHouseholdKwh + annualEvKwh + annualDhwElec
     in
     card "#f5f7ff" "Annual Energy"
-        [ detailRow "Gross heat demand"   (String.fromInt (round u.annualHeatKwh))     "kWh/yr"
+        [ detailRow "Effective HDD (rescaled to setpoint)" (String.fromInt (round u.effectiveHdd)) "°C·d"
+        , detailRow "Gross heat demand"   (String.fromInt (round u.annualHeatKwh))     "kWh/yr"
         , detailRow "Solar gain (incident)" (String.fromInt (round u.annualSolarGain)) "kWh/yr"
+        , detailRow "Internal gains (4 W/m²)" (String.fromInt (round u.annualInternalGain)) "kWh/yr"
         , detailRow "  → useful (heating)" ("−" ++ String.fromInt (round u.annualUsefulGain)) "kWh/yr"
         , detailRow "  → excess (cooling load)" (String.fromInt (round u.annualExcessGain)) "kWh/yr"
         , detailRow "Net heat demand"     (String.fromInt (round u.annualNetHeatKwh))  "kWh/yr"
