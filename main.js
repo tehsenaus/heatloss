@@ -7735,7 +7735,8 @@ var $author$project$Main$dayNightChart = F3(
 						_Utils_Tuple2(row.dayDhwKwh, '#b05577'),
 						_Utils_Tuple2(row.dayCoolKwh, '#3b82c4'),
 						_Utils_Tuple2(row.dayHouseholdKwh, '#888888'),
-						_Utils_Tuple2(row.dayEvKwh, '#444466')
+						_Utils_Tuple2(row.dayEvKwh, '#444466'),
+						_Utils_Tuple2(row.batteryDayChargeFromPvKwh, '#d4a017')
 					])) : _Utils_Tuple2(
 				_List_fromArray(
 					[
@@ -8218,6 +8219,7 @@ var $author$project$Main$monthlyBreakdown = F4(
 					var pvToBattery = A2($elm$core$Basics$min, (pvSurplus - pvToEvDay) - pvToDhwDay, batteryChargeCap);
 					var batteryNightDischarge = A2($elm$core$Basics$min, pvToBattery * $author$project$Main$batteryEff, nightLoadForBattery);
 					return {
+						batteryDayChargeFromPvKwh: pvToBattery,
 						batteryDayDischargeKwh: batteryDayDischarge,
 						batteryNightDischargeKwh: batteryNightDischarge,
 						coolingKwh: coolingDaily,
@@ -8327,7 +8329,7 @@ var $author$project$Main$monthlyChartSection = F2(
 					return m.pvKwh + m.batteryDayDischargeKwh;
 				};
 				var dayD = function (m) {
-					return (((m.dayHpKwh + m.dayDhwKwh) + m.dayCoolKwh) + m.dayHouseholdKwh) + m.dayEvKwh;
+					return ((((m.dayHpKwh + m.dayDhwKwh) + m.dayCoolKwh) + m.dayHouseholdKwh) + m.dayEvKwh) + m.batteryDayChargeFromPvKwh;
 				};
 				return A2(
 					$elm$core$Maybe$withDefault,

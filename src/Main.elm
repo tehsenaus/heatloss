@@ -1175,6 +1175,7 @@ type alias MonthlyRow =
     -- fall out of the same cascade — no mode flag.
     , batteryDayDischargeKwh   : Float
     , batteryNightDischargeKwh : Float
+    , batteryDayChargeFromPvKwh : Float
     , nightChargeFromGridKwh   : Float
     , daysInMonth              : Float
     }
@@ -1386,6 +1387,7 @@ monthlyBreakdown m r u pv =
             , nightDhwKwh      = dhwRemaining
             , batteryDayDischargeKwh   = batteryDayDischarge
             , batteryNightDischargeKwh = batteryNightDischarge
+            , batteryDayChargeFromPvKwh = pvToBattery
             , nightChargeFromGridKwh   = nightChargeFromGrid
             , daysInMonth              = days
             }
@@ -1526,7 +1528,7 @@ monthlyChartSection model maybeR =
                 maxVal =
                     let
                         daySupply m = m.pvKwh + m.batteryDayDischargeKwh
-                        dayD m = m.dayHpKwh + m.dayDhwKwh + m.dayCoolKwh + m.dayHouseholdKwh + m.dayEvKwh
+                        dayD m = m.dayHpKwh + m.dayDhwKwh + m.dayCoolKwh + m.dayHouseholdKwh + m.dayEvKwh + m.batteryDayChargeFromPvKwh
                         nightSupply m = m.batteryNightDischargeKwh
                         nightD m = m.nightHpKwh + m.nightCoolKwh + m.nightHouseholdKwh + m.nightEvKwh + m.nightDhwKwh + m.nightChargeFromGridKwh
                     in
@@ -1983,11 +1985,12 @@ dayNightChart rows maxVal isDay =
                 ( [ ( row.pvKwh, "#2e7d32" )
                   , ( row.batteryDayDischargeKwh, "#d4a017" )
                   ]
-                , [ ( row.dayHpKwh,        "#c77700" )
-                  , ( row.dayDhwKwh,       "#b05577" )
-                  , ( row.dayCoolKwh,      "#3b82c4" )
-                  , ( row.dayHouseholdKwh, "#888888" )
-                  , ( row.dayEvKwh,        "#444466" )
+                , [ ( row.dayHpKwh,                "#c77700" )
+                  , ( row.dayDhwKwh,               "#b05577" )
+                  , ( row.dayCoolKwh,              "#3b82c4" )
+                  , ( row.dayHouseholdKwh,         "#888888" )
+                  , ( row.dayEvKwh,                "#444466" )
+                  , ( row.batteryDayChargeFromPvKwh, "#d4a017" )
                   ]
                 )
 
